@@ -19,7 +19,12 @@
 ### D-1: 公式CLIの実行 (FR-1, FR-6, NFR-4)
 
 ```ts
-const ALLOWED = [["login"], ["info"], ["item", "list"]] as const
+const ALLOWED = [
+  ["login"],
+  ["info"],
+  ["vault", "list"],
+  ["item", "list"],
+] as const
 const TIMEOUT_MS = 60_000
 
 export async function runCli(
@@ -52,7 +57,7 @@ function cliEnv(): NodeJS.ProcessEnv
 ### D-2: ログインと再ログイン (FR-1, FR-9)
 
 ```ts
-export type ReaderState = "loading" | "ready" | "relogin" | "error"
+export type ReaderState = "loading" | "ready" | "relogin" | "error" | "disabled" // アクセストークンが未設定
 export type ErrorKind = "token" | "permission" | "timeout" | "cli" | "unknown"
 
 export async function ensureSession(): Promise<void> // info が成功すれば何もしない。失敗なら login を1回実行する
@@ -76,7 +81,6 @@ export async function withSession<T>(
 | セッションなし・失効     | 標準エラーに「requires an authenticated client」を含む（終了コード1）                          |
 | トークンの期限切れ・失効 | ログインが失敗し、標準エラーに「invalid, expired or has been deleted」を含む                   |
 | トークンの形式不正       | ログインが失敗し、標準エラーに「Failed to parse personal access token」を含む（kind は token） |
-| Vaultが存在しない        | 標準エラーに「Could not find vault」を含む（kind は cli）                                      |
 | 権限なし                 | 標準エラーに NotAllowed を含む                                                                 |
 | 打ち切り                 | 実行が60秒を超える（kind は timeout）                                                          |
 | 上記以外                 | kind は unknown                                                                                |
@@ -111,9 +115,14 @@ export function project(rawJson: string): Projection {
 }
 ```
 
-取得は `item list --vault-name <名> --filter-state active --output json --show-secrets` で行う。ユーザー名とメールアドレスは、秘匿情報を含む取得でのみ得られる。
+取得は、はじめに `vault list --output json` でトークンが参照できるVaultの共有IDをすべて得て、Vaultごとに `item list --share-id <ID> --filter-state active --output json --show-secrets` を順に実行する。Vaultの名前は指定しない。ユーザー名とメールアドレスは、秘匿情報を含む取得でのみ得られる。
 
-### D-4: キャッシュと状態 (FR-7, FR-8, FR-10, NFR-1, NFR-2, NFR-3)
+```ts
+export function vaultShareIds(rawJson: string): string[] // vault list の出力から share_id を取り出す
+export function mergeProjections(list: readonly Projection[]): Projection // 対応表をまとめ、エントリ名を昇順に並べ、件数を合計する
+```
+
+### D-4: キャッシュと状態 (FR-7, FR-8, FR-10, FR-11, NFR-1, NFR-2, NFR-3)
 
 ```ts
 export type Status = {
@@ -129,6 +138,14 @@ export interface ProtonReader {
   refresh(): Promise<void> // 実行中の再取得があれば合流する
 }
 const TTL_MS = 600_000
+
+// アクセストークンが未設定のときの実装。公式CLIを起動しない
+class DisabledReader implements ProtonReader {
+  getMap(): AddressMap // 常に空
+  getStatus(): Status // state が disabled で、他の項目は null
+  refresh(): Promise<void> // 何もしない
+}
+export function loadProtonConfig(env): ProtonConfig | null // トークンが未設定または空なら null
 ```
 
 | 状況               | 動作                                                                |
@@ -143,7 +160,13 @@ const TTL_MS = 600_000
 
 ```ts
 // ログに出す項目は固定。取得結果の本文や標準エラーの全文は出さない
-logger.info({ cmd: "item list", exitCode: 0, durationMs, itemCount })
+logger.info({
+  cmd: "item list",
+  exitCode: 0,
+  durationMs,
+  itemCount,
+  vaultCount,
+})
 logger.info({ cmd: "login", exitCode: 0, durationMs }) // ログインを実行したときだけ
 logger.warn({ cmd: "login", exitCode: 1, kind: "token" })
 ```
@@ -159,8 +182,8 @@ logger.warn({ cmd: "login", exitCode: 1, kind: "token" })
 
 | 事象                         | 処理                                                    |
 | ---------------------------- | ------------------------------------------------------- |
-| トークンの環境変数が未設定   | 起動時に変数名を示して異常終了する                      |
-| Vault名が一致しない          | 状態を error（kind は cli）にし、固定文言で通知する     |
+| トークンの環境変数が未設定   | 連携を無効にして起動し、状態を disabled にする          |
+| 参照できるVaultが無い        | 空の対応表で状態を ready（参照件数は 0）にする          |
 | 再ログインにも失敗           | 状態を error にし、直前の対応表を保持する               |
 | 許可されていないサブコマンド | ForbiddenCommandError を送出し、公式CLIを起動しない     |
 | 公式CLIの実行が60秒を超える  | プロセスを終了し、状態を error（kind は timeout）にする |

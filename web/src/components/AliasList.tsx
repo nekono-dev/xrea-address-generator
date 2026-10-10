@@ -14,6 +14,7 @@ export function confirmText(a: Alias): string {
 const hhmm = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : "--:--")
 
 function ProtonLine({ proton, onRefresh }: { proton: ProtonStatus | null; onRefresh: () => void }) {
+  if (proton?.state === "disabled") return null // 連携が無効なときは、照合の表示を出さない
   if (!proton) return <div class="pstat" />
   if (proton.state === "loading" || proton.state === "relogin")
     return (

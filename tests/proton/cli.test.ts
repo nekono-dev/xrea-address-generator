@@ -20,11 +20,12 @@ describe("公式CLIの実行", () => {
   test("proton-pass-reader/AC-6: 許可されていないサブコマンドの実行要求が拒否され、公式CLIは起動されない", async () => {
     const f = fakeBin("exit 0")
     const run = createCliRunner({ token: "t", sessionDir: tmp(), bin: f.bin })
-    for (const args of [["item", "create", "login"], ["item", "delete"], ["item", "update"], ["vault", "create"], ["logout"], ["item"]]) {
+    for (const args of [["item", "create", "login"], ["item", "delete"], ["item", "update"], ["vault", "create"], ["vault", "delete"], ["logout"], ["item"], ["vault"]]) {
       await expect(run(args)).rejects.toBeInstanceOf(ForbiddenCommandError)
     }
     expect(fs.existsSync(f.log)).toBe(false)
-    expect(isAllowed(["item", "list", "--vault-name", "v"])).toBe(true)
+    expect(isAllowed(["item", "list", "--share-id", "s"])).toBe(true)
+    expect(isAllowed(["vault", "list", "--output", "json"])).toBe(true)
   })
 
   test("公式CLIへ渡す環境変数は固定の集合のみで、他の秘匿値を渡さない", async () => {
@@ -57,9 +58,6 @@ describe("公式CLIの実行", () => {
     expect(classify("1: This personal access token is invalid, expired or has been deleted.").kind).toBe("token")
     expect(classify("0: Failed to parse personal access token token").kind).toBe("token")
     expect(classify("Could not perform operation. Reason: NotAllowed").kind).toBe("permission")
-    const vault = classify("Caused by:\n    Could not find vault x")
-    expect(vault.kind).toBe("cli")
-    expect(vault.message).toBe("指定したVaultが見つかりません")
     expect(classify("something else").kind).toBe("unknown")
     // 標準エラーの全文はメッセージに含めない
     expect(classify("secret-detail NotAllowed").message).not.toContain("secret-detail")

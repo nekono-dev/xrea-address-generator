@@ -73,12 +73,26 @@ describe("HTTPの入出力と配信", () => {
   })
 
   test("必須の環境変数が未設定なら、不足している変数名を示す", () => {
-    expect(() => loadConfig({ XREA_ACCOUNT: "a", PROTON_PASS_VAULT_NAME: "v" })).toThrow(ConfigError)
-    expect(() => loadConfig({ XREA_ACCOUNT: "a", PROTON_PASS_VAULT_NAME: "v" })).toThrow(
-      "XREA_SERVER_NAME, XREA_API_SECRET_KEY, PROTON_PASS_PERSONAL_ACCESS_TOKEN",
-    )
-    const c = loadConfig({ XREA_ACCOUNT: "a", XREA_SERVER_NAME: "s", XREA_API_SECRET_KEY: "k", PROTON_PASS_PERSONAL_ACCESS_TOKEN: "t", PROTON_PASS_VAULT_NAME: "v" })
-    expect(c).toMatchObject({ bindAddress: "127.0.0.1", port: 3000, logLevel: "info", proton: { sessionDir: "/var/lib/xrea-address-generator/session" } })
+    expect(() => loadConfig({ XREA_ACCOUNT: "a" })).toThrow(ConfigError)
+    expect(() => loadConfig({ XREA_ACCOUNT: "a" })).toThrow("XREA_SERVER_NAME, XREA_API_SECRET_KEY")
+    const c = loadConfig({ XREA_ACCOUNT: "a", XREA_SERVER_NAME: "s", XREA_API_SECRET_KEY: "k", PROTON_PASS_PERSONAL_ACCESS_TOKEN: "t", TUNNEL_TOKEN: "x" })
+    expect(c).toMatchObject({ bindAddress: "127.0.0.1", port: 3000, logLevel: "info", proton: { token: "t", sessionDir: "/var/lib/xrea-address-generator/session" } })
+  })
+
+  test("alias-service/AC-20: Proton Passのトークンが未設定でも起動でき、連携は無効になる", () => {
+    const base = { XREA_ACCOUNT: "a", XREA_SERVER_NAME: "s", XREA_API_SECRET_KEY: "k" }
+    expect(loadConfig(base).proton).toBeNull()
+    expect(loadConfig({ ...base, PROTON_PASS_PERSONAL_ACCESS_TOKEN: "" }).proton).toBeNull()
+  })
+
+  test("alias-service/AC-21: TUNNEL_TOKEN が未設定なら全アドレスで待ち受け、設定があれば 127.0.0.1 で待ち受ける", () => {
+    const base = { XREA_ACCOUNT: "a", XREA_SERVER_NAME: "s", XREA_API_SECRET_KEY: "k" }
+    expect(loadConfig(base).bindAddress).toBe("0.0.0.0")
+    expect(loadConfig({ ...base, TUNNEL_TOKEN: "" }).bindAddress).toBe("0.0.0.0")
+    expect(loadConfig({ ...base, TUNNEL_TOKEN: "x" }).bindAddress).toBe("127.0.0.1")
+    // 待ち受けアドレスを明示したときは、それを優先する
+    expect(loadConfig({ ...base, BIND_ADDRESS: "192.168.1.5" }).bindAddress).toBe("192.168.1.5")
+    expect(loadConfig({ ...base, TUNNEL_TOKEN: "x", BIND_ADDRESS: "0.0.0.0" }).bindAddress).toBe("0.0.0.0")
   })
 })
 

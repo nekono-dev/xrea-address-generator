@@ -49,6 +49,20 @@ describe("一覧の表示・絞り込み・並び替え", () => {
   })
 })
 
+describe("Proton Pass連携が無効なとき", () => {
+  test("web-ui/AC-24: 連携が無効の応答を受けると、照合の表示と更新ボタンが出ず、状態の確認も繰り返さない", async () => {
+    const server = fakeServer({ proton: ready({ state: "disabled", updatedAt: null, itemCount: null }) })
+    const r = render(<App store={createStore()} pollMs={10} />)
+    await waitFor(() => expect(r.container.querySelectorAll(".row").length).toBeGreaterThan(0))
+    await new Promise(res => setTimeout(res, 60))
+    expect(r.container.querySelector("#proton-status")).toBeNull()
+    expect(r.container.querySelector("#proton-refresh")).toBeNull()
+    expect(r.container.querySelector(".pstat")).toBeNull()
+    expect(r.container.querySelector(".chip.sk")).toBeNull()
+    expect(server.requests.some(q => q.url === "/api/proton/status")).toBe(false)
+  })
+})
+
 describe("コピーと削除", () => {
   test("web-ui/AC-8: コピーボタンの押下でクリップボードにアドレスが入り、通知が表示される", async () => {
     const writeText = vi.fn(async () => undefined)

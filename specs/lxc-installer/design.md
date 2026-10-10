@@ -17,7 +17,7 @@
 ### D-1: 構成と実行の流れ (FR-1)
 
 ```text
-[install.sh]  curl … | sudo sh -s -- install | update | uninstall
+[install.sh]  wget -qO- … | sudo sh -s -- install | update | uninstall
    │  取得（埋め込んだコミットに固定）→ コミットの一致確認 → 本体へ委譲
    ▼
 [installer/main.sh]  設定の検証と反映 → 導入メタ情報の記録 → 常設コマンドの配置 → 導入のフック
@@ -27,10 +27,10 @@
 
 ```sh
 # 導入（秘匿値は、履歴に残らない環境変数で渡す）
-curl -fsSL https://github.com/nekono-dev/xrea-address-generator/releases/latest/download/install.sh \
-  | sudo env XREA_API_SECRET_KEY=… PROTON_PASS_PERSONAL_ACCESS_TOKEN=… sh -s -- install --set XREA_ACCOUNT=… --set XREA_SERVER_NAME=… --set PROTON_PASS_VAULT_NAME=…
+wget -qO- https://github.com/nekono-dev/xrea-address-generator/releases/latest/download/install.sh \
+  | sudo env XREA_API_SECRET_KEY=… PROTON_PASS_PERSONAL_ACCESS_TOKEN=… sh -s -- install --set XREA_ACCOUNT=… --set XREA_SERVER_NAME=…
 # LXDのホストから、コンテナへ導入する
-lxc exec <コンテナ名> --env XREA_API_SECRET_KEY=… -- sh -c 'curl -fsSL <URL>/install.sh | sh -s -- install --set …'
+lxc exec <コンテナ名> --env XREA_API_SECRET_KEY=… -- sh -c 'wget -qO- <URL>/install.sh | sh -s -- install --set …'
 ```
 
 | 種別         | パス                                                                                  |
@@ -48,10 +48,9 @@ lxc exec <コンテナ名> --env XREA_API_SECRET_KEY=… -- sh -c 'curl -fsSL <U
 XREA_ACCOUNT||required|XREAのアカウントID
 XREA_SERVER_NAME||required|XREAのサーバ名
 XREA_API_SECRET_KEY||required|XREAのAPIシークレットキー
-PROTON_PASS_PERSONAL_ACCESS_TOKEN||required|Proton Passの読み取り専用アクセストークン
-PROTON_PASS_VAULT_NAME||required|照合に使うVault名
-TUNNEL_TOKEN||optional|Cloudflare Tunnelのトークン（指定するとcloudflaredを導入する）
-BIND_ADDRESS|127.0.0.1|optional|待ち受けるアドレス
+PROTON_PASS_PERSONAL_ACCESS_TOKEN||optional|Proton Passの読み取り専用アクセストークン（未指定ならProton Pass連携を使わない）
+TUNNEL_TOKEN||optional|Cloudflare Tunnelのトークン（指定するとcloudflaredを導入する。未指定ならLANに公開する）
+BIND_ADDRESS||optional|待ち受けるアドレス（未指定ならTUNNEL_TOKENがあれば127.0.0.1、無ければ0.0.0.0）
 PORT|3000|optional|待ち受けるポート
 SESSION_DIR|/var/lib/xrea-address-generator/session|optional|Proton Passのセッション保存先
 LOG_LEVEL|info|optional|ログの詳細度
@@ -79,13 +78,13 @@ LOG_LEVEL|info|optional|ログの詳細度
 app_install() {
   . /etc/os-release; [ "$ID" = "ubuntu" ] || die "Ubuntu のみ対応しています"
   export DEBIAN_FRONTEND=noninteractive
-  apt-get update -q && apt-get install -y -q curl jq ca-certificates
+  apt-get update -q && apt-get install -y -q wget jq ca-certificates
   [ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null)" = "22" ] \
-    || { curl -fsSL https://deb.nodesource.com/setup_22.x | sh && apt-get install -y -q nodejs; }
-  M=$(curl -fsSL https://proton.me/download/pass-cli/versions.json); A=$(uname -m)
+    || { wget -qO- https://deb.nodesource.com/setup_22.x | sh && apt-get install -y -q nodejs; }
+  M=$(wget -qO- https://proton.me/download/pass-cli/versions.json); A=$(uname -m)
   URL=$(printf '%s' "$M" | jq -r ".passCliVersions.urls.linux.$A.url")
   SHA=$(printf '%s' "$M" | jq -r ".passCliVersions.urls.linux.$A.hash")
-  curl -fsSL -o /tmp/pass-cli "$URL" && echo "$SHA  /tmp/pass-cli" | sha256sum -c - \
+  wget -q -O /tmp/pass-cli "$URL" && echo "$SHA  /tmp/pass-cli" | sha256sum -c - \
     && install -m 0755 /tmp/pass-cli /usr/local/bin/pass-cli && rm -f /tmp/pass-cli
   id xrea-gen >/dev/null 2>&1 || useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin xrea-gen
   mkdir -p "$DATA_DIR/session" && chown -R xrea-gen:xrea-gen "$DATA_DIR"
@@ -96,7 +95,7 @@ app_install() {
   . "$CONF_FILE"
   if [ -n "${TUNNEL_TOKEN:-}" ]; then
     install -d -m 0755 /usr/share/keyrings
-    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
+    wget -q -O /usr/share/keyrings/cloudflare-main.gpg https://pkg.cloudflare.com/cloudflare-main.gpg
     echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' > /etc/apt/sources.list.d/cloudflared.list
     apt-get update -q && apt-get install -y -q cloudflared
     systemctl enable cloudflared-xrea && systemctl restart cloudflared-xrea
@@ -150,13 +149,13 @@ ExecStart=/usr/local/bin/cloudflared tunnel --no-autoupdate run
 Restart=always
 ```
 
-| 項目             | 内容                                                                                    |
-| ---------------- | --------------------------------------------------------------------------------------- |
-| 待ち受け         | 既定の BIND_ADDRESS（127.0.0.1）でループバックだけに待ち受ける。外部へは公開しない      |
-| トンネルの接続先 | 同一コンテナ内の cloudflared が http://127.0.0.1:3000 へ接続する                        |
-| 死活確認         | GET /healthz が 200 を返す。起動から30秒以内の初回成功を確認する                        |
-| 設定の読み込み   | 設定ファイルはroot所有の600のまま、サービス管理側が読み込んでアプリへ環境変数として渡す |
-| 検証用コンテナ   | テストは ubuntu:24.04 から使い捨てのコンテナを作り、終了後に破棄する                    |
+| 項目             | 内容                                                                                                           |
+| ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| 待ち受け         | BIND_ADDRESS が未指定なら、トークンがあるときは 127.0.0.1（ループバックだけ）、無いときは 0.0.0.0（LANへ公開） |
+| トンネルの接続先 | 同一コンテナ内の cloudflared が http://127.0.0.1:3000 へ接続する                                               |
+| 死活確認         | GET /healthz が 200 を返す。起動から30秒以内の初回成功を確認する                                               |
+| 設定の読み込み   | 設定ファイルはroot所有の600のまま、サービス管理側が読み込んでアプリへ環境変数として渡す                        |
+| 検証用コンテナ   | テストは ubuntu:24.04 から使い捨てのコンテナを作り、終了後に破棄する                                           |
 
 ### D-5: 更新 (FR-8, NFR-4)
 

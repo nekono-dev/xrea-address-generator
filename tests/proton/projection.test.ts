@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest"
 import { CachedReader, type Logger } from "../../src/proton/cache"
 import { project } from "../../src/proton/projection"
 import { Session } from "../../src/proton/session"
+import { withVaults } from "./helpers"
 
 const fixture = fs.readFileSync(path.join(__dirname, "../fixtures/proton-items.json"), "utf8")
 
@@ -33,8 +34,8 @@ describe("対応表への変換", () => {
   test("proton-pass-reader/AC-5: パスワードを含む取得結果の処理後、対応表とログの出力にそのパスワード文字列が含まれない", async () => {
     const lines: string[] = []
     const logger: Logger = { info: o => lines.push(JSON.stringify(o)), warn: o => lines.push(JSON.stringify(o)) }
-    const run = async () => ({ stdout: fixture, durationMs: 5 })
-    const reader = new CachedReader({ run, session: new Session(run, "/tmp/unused"), vault: "v", logger })
+    const run = withVaults(async () => ({ stdout: fixture, durationMs: 5 }))
+    const reader = new CachedReader({ run, session: new Session(run, "/tmp/unused"), logger })
     await reader.refresh()
     const dumped = JSON.stringify([...reader.getMap()]) + JSON.stringify(reader.getStatus()) + lines.join("\n")
     for (const secret of ["FIXTURE-SECRET", "FIXTURE-NOTE", "FIXTURE-TOTP", "https://i1.example"]) expect(dumped).not.toContain(secret)

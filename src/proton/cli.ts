@@ -1,7 +1,7 @@
 // 公式CLI（pass-cli）の実行。許可リスト・環境変数の限定・打ち切りを備える。
 import { execFile } from "node:child_process"
 
-export const ALLOWED = [["login"], ["info"], ["item", "list"]] as const
+export const ALLOWED = [["login"], ["info"], ["vault", "list"], ["item", "list"]] as const
 export const TIMEOUT_MS = 60_000
 const MAX_BUFFER = 64 * 1024 * 1024
 
@@ -27,12 +27,11 @@ export class CliError extends Error {
   }
 }
 
-export const FIXED_MESSAGES: Record<ErrorKind | "vault", string> = {
+export const FIXED_MESSAGES: Record<ErrorKind, string> = {
   token: "Proton Passのアクセストークンが無効か、期限切れです",
   permission: "Proton Passのアクセストークンに権限がありません",
   timeout: "Proton Pass CLIが60秒以内に応答しませんでした",
   cli: "Proton Pass CLIの実行に失敗しました",
-  vault: "指定したVaultが見つかりません",
   unknown: "Proton Passの取得に失敗しました",
 }
 
@@ -42,7 +41,6 @@ export function classify(stderr: string): CliError {
   if (stderr.includes("invalid, expired or has been deleted") || stderr.includes("Failed to parse personal access token"))
     return new CliError("token", FIXED_MESSAGES.token)
   if (stderr.includes("NotAllowed")) return new CliError("permission", FIXED_MESSAGES.permission)
-  if (stderr.includes("Could not find vault")) return new CliError("cli", FIXED_MESSAGES.vault)
   return new CliError("unknown", FIXED_MESSAGES.unknown)
 }
 

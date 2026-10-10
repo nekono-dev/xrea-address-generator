@@ -1,9 +1,11 @@
 import fs from "node:fs"
 import path from "node:path"
 import { describe, expect, test } from "vitest"
-import { CachedReader, TTL_MS, type Status } from "../../src/proton/cache"
+import { CachedReader, DisabledReader, TTL_MS, type Status } from "../../src/proton/cache"
 import { CliError, type CliRunner } from "../../src/proton/cli"
+import { createProtonReader, loadProtonConfig } from "../../src/proton/index"
 import { Session } from "../../src/proton/session"
+import { vaultsJson, withVaults } from "./helpers"
 
 const fixture = fs.readFileSync(path.join(__dirname, "../fixtures/proton-items.json"), "utf8")
 const silent = { info: () => undefined, warn: () => undefined }
@@ -19,13 +21,14 @@ const itemsJson = (n: number, tag = "") =>
 
 function setup(opts: { run?: CliRunner; now?: () => number } = {}) {
   let calls = 0
-  const run: CliRunner =
+  const run: CliRunner = withVaults(
     opts.run ??
-    (async args => {
-      if (args[0] === "item") calls++
-      return { stdout: fixture, durationMs: 1 }
-    })
-  const reader = new CachedReader({ run, session: new Session(run, "/tmp/unused"), vault: "v", now: opts.now, logger: silent })
+      (async args => {
+        if (args[0] === "item") calls++
+        return { stdout: fixture, durationMs: 1 }
+      }),
+  )
+  const reader = new CachedReader({ run, session: new Session(run, "/tmp/unused"), now: opts.now, logger: silent })
   return { reader, calls: () => calls }
 }
 
@@ -65,6 +68,7 @@ describe("キャッシュ", () => {
     const { reader } = setup({ run })
     await reader.refresh()
     const p = reader.refresh()
+    await new Promise(r => setTimeout(r, 0)) // Vault一覧の取得を終え、アイテムの取得で待機するまで進める
     expect(reader.getStatus().state).toBe("loading")
     expect(reader.getMap().get("user0@example.com")).toEqual(["titleold-0"])
     release()
@@ -95,7 +99,8 @@ describe("状態と再ログイン", () => {
       }
       return { stdout: fixture, durationMs: 1 }
     }
-    reader = new CachedReader({ run, session: new Session(run, fs.mkdtempSync("/tmp/proton-")), vault: "v", logger: silent })
+    const wrapped = withVaults(run)
+    reader = new CachedReader({ run: wrapped, session: new Session(wrapped, fs.mkdtempSync("/tmp/proton-")), logger: silent })
     await reader.refresh()
     expect(seen).toEqual(["login:relogin"])
     const s: Status = reader.getStatus()
@@ -171,5 +176,49 @@ describe("性能", () => {
     const map = reader.getMap()
     expect(performance.now() - start).toBeLessThan(50)
     expect(map.size).toBe(300)
+  })
+})
+
+describe("Vaultの探索と連携の無効化", () => {
+  test("proton-pass-reader/AC-15: トークンで参照できる複数のVaultのアイテムが、1つの対応表にまとまる", async () => {
+    const calls: string[][] = []
+    const run: CliRunner = async args => {
+      calls.push(args)
+      const i = args.indexOf("--share-id")
+      return { stdout: i < 0 ? vaultsJson(3) : itemsJson(1, args[i + 1]), durationMs: 1 }
+    }
+    const session = new Session(run, "/tmp/unused")
+    const reader = new CachedReader({ run, session, logger: silent })
+    await reader.refresh()
+    expect(calls[0]).toEqual(["vault", "list", "--output", "json"])
+    expect(calls.slice(1).map(a => a[a.indexOf("--share-id") + 1])).toEqual(["s0", "s1", "s2"])
+    expect(calls.every(a => !a.includes("--vault-name"))).toBe(true)
+    // 3つのVaultが同じアドレスを持つので、エントリ名が昇順で3件並ぶ
+    expect(reader.getMap().get("user0@example.com")).toEqual(["titles0-0", "titles1-0", "titles2-0"])
+    expect(reader.getStatus()).toMatchObject({ state: "ready", itemCount: 3 })
+  })
+
+  test("参照できるVaultが無いとき、空の対応表で準備完了になる", async () => {
+    const run: CliRunner = async () => ({ stdout: vaultsJson(0), durationMs: 1 })
+    const reader = new CachedReader({ run, session: new Session(run, "/tmp/unused"), logger: silent })
+    await reader.refresh()
+    expect(reader.getMap().size).toBe(0)
+    expect(reader.getStatus()).toMatchObject({ state: "ready", itemCount: 0 })
+  })
+
+  test("proton-pass-reader/AC-16: アクセストークンが未設定なら連携が無効になり、公式CLIが起動されない", async () => {
+    expect(loadProtonConfig({})).toBeNull()
+    expect(loadProtonConfig({ PROTON_PASS_PERSONAL_ACCESS_TOKEN: "" })).toBeNull()
+    expect(loadProtonConfig({ PROTON_PASS_PERSONAL_ACCESS_TOKEN: "t" })).toEqual({ token: "t", sessionDir: "/var/lib/xrea-address-generator/session" })
+    const bin = path.join(fs.mkdtempSync("/tmp/proton-bin-"), "pass-cli")
+    fs.writeFileSync(`${bin}.called`, "no")
+    fs.writeFileSync(bin, `#!/bin/sh\necho yes > ${bin}.called\n`, { mode: 0o755 })
+    const reader = createProtonReader(null, { bin })
+    expect(reader).toBeInstanceOf(DisabledReader)
+    await reader.refresh()
+    expect(reader.getMap().size).toBe(0)
+    expect(reader.getStatus()).toEqual({ state: "disabled", updatedAt: null, reloginAt: null, itemCount: null, error: null })
+    await new Promise(r => setTimeout(r, 50))
+    expect(fs.readFileSync(`${bin}.called`, "utf8").trim()).toBe("no")
   })
 })

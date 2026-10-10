@@ -7,6 +7,7 @@
 - [x] T-1.2: 設定スキーマにキーを宣言し、プレースホルダを実値へ置換する。
 - [x] T-1.3: 生成した install.sh の構文検査と shellcheck を通す。
 - [x] T-1.4: 必須欠如・優先順位・保持・未宣言キー・不正値のテストを追加する。
+- [x] T-1.5: アクセストークンの任意化とVault名の削除をスキーマに反映し、取得の手段と案内を wget に改める。
 - 検証: `npx vitest run tests/installer/workflow.test.ts && LXD_LIVE=1 npx vitest run tests/installer/lxd.live.test.ts -t config`
 
 ## Phase 2: 導入とサービス
@@ -15,6 +16,8 @@
 - [x] T-2.1: 導入のフックに、手順1から6を実装する。
 - [x] T-2.2: アプリと cloudflared のサービス定義を書き出す処理を実装する。
 - [x] T-2.3: 使い捨てのLXDコンテナで、導入・再実行・稼働・外部からの接続不可・強制終了後の再起動を確認するテストを追加する。
+- [x] T-2.4: トンネルのトークンの有無で待ち受けアドレスが切り替わることを、使い捨てのLXDコンテナで確認するテストを追加する。
+- [x] T-2.5: Proton Passのアクセストークンを指定しない導入が成功することを、使い捨てのLXDコンテナで確認するテストを追加する。
 - 検証: `LXD_LIVE=1 npx vitest run tests/installer/lxd.live.test.ts -t install`
 
 ## Phase 3: 更新とアンインストール

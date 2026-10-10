@@ -33,7 +33,7 @@ for arg in "$@"; do
   case "$arg" in -h|--help) usage; exit 0 ;; esac
 done
 
-[ "$(id -u)" -eq 0 ] || die "root権限で実行してください（例: curl -fsSL <URL>/install.sh | sudo sh -s -- $SUB）"
+[ "$(id -u)" -eq 0 ] || die "root権限で実行してください（例: wget -qO- <URL>/install.sh | sudo sh -s -- $SUB）"
 case "$DIR" in
   /*) ;;
   *) die "取得先は絶対パスで指定してください: $DIR" ;;
@@ -59,7 +59,7 @@ log "$SUB: $REF（$COMMIT）"
 if ! command -v git >/dev/null 2>&1 || [ ! -d /etc/ssl/certs ]; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -q
-  apt-get install -y -q git ca-certificates curl
+  apt-get install -y -q git ca-certificates
 fi
 
 if [ -d "$DIR/.git" ]; then

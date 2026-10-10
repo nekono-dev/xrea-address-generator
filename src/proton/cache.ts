@@ -1,9 +1,9 @@
 // 対応表のキャッシュ、再取得の合流、状態の管理。
 import { CliError, FIXED_MESSAGES, ForbiddenCommandError, type CliRunner, type ErrorKind } from "./cli"
-import { project, type AddressMap } from "./projection"
+import { mergeProjections, project, vaultShareIds, type AddressMap } from "./projection"
 import type { Session } from "./session"
 
-export type ReaderState = "loading" | "ready" | "relogin" | "error"
+export type ReaderState = "loading" | "ready" | "relogin" | "error" | "disabled"
 export type Status = {
   state: ReaderState
   updatedAt: string | null
@@ -34,7 +34,6 @@ export class CachedReader implements ProtonReader {
     private readonly opts: {
       run: CliRunner
       session: Session
-      vault: string
       ttlMs?: number
       now?: () => number
       logger?: Logger
@@ -65,14 +64,22 @@ export class CachedReader implements ProtonReader {
   private async doRefresh(): Promise<void> {
     const log = this.opts.logger ?? consoleLogger
     this.status = { ...this.status, state: "loading", error: null }
-    const args = ["item", "list", "--vault-name", this.opts.vault, "--filter-state", "active", "--output", "json", "--show-secrets"]
     try {
       let relogged = false
       // 取得結果の文字列は変数に保持せず、変換関数の戻り値だけを受け取る
       const { result, durationMs } = await this.opts.session.withSession(
         async () => {
-          const r = await this.opts.run(args)
-          return { result: project(r.stdout), durationMs: r.durationMs }
+          // トークンで参照できるVaultをすべて探索し、Vaultごとに取得して1つにまとめる
+          const vaults = await this.opts.run(["vault", "list", "--output", "json"])
+          const shareIds = vaultShareIds(vaults.stdout)
+          let ms = vaults.durationMs
+          const parts = []
+          for (const id of shareIds) {
+            const r = await this.opts.run(["item", "list", "--share-id", id, "--filter-state", "active", "--output", "json", "--show-secrets"])
+            parts.push(project(r.stdout))
+            ms += r.durationMs
+          }
+          return { result: { ...mergeProjections(parts), vaultCount: shareIds.length }, durationMs: ms }
         },
         () => {
           relogged = true
@@ -90,7 +97,7 @@ export class CachedReader implements ProtonReader {
         itemCount: result.itemCount,
         error: null,
       }
-      log.info({ cmd: "item list", exitCode: 0, durationMs, itemCount: result.itemCount })
+      log.info({ cmd: "item list", exitCode: 0, durationMs, itemCount: result.itemCount, vaultCount: result.vaultCount })
     } catch (e) {
       const kind: ErrorKind = e instanceof CliError ? e.kind : e instanceof ForbiddenCommandError ? "cli" : "unknown"
       const message = e instanceof CliError ? e.message : FIXED_MESSAGES[kind]
@@ -99,4 +106,17 @@ export class CachedReader implements ProtonReader {
       log.warn({ cmd: "item list", exitCode: 1, kind })
     }
   }
+}
+
+/** アクセストークンが未設定のときの連携の無効化。公式CLIを一切呼び出さない */
+export class DisabledReader implements ProtonReader {
+  getMap(): AddressMap {
+    return new Map()
+  }
+
+  getStatus(): Status {
+    return { state: "disabled", updatedAt: null, reloginAt: null, itemCount: null, error: null }
+  }
+
+  async refresh(): Promise<void> {}
 }

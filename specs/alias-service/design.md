@@ -19,7 +19,7 @@
 
 ## 2. 設計項目
 
-### D-1: HTTP API (FR-11)
+### D-1: HTTP API (FR-2, FR-11)
 
 | メソッドとパス               | 要求                            | 成功応答                             |
 | ---------------------------- | ------------------------------- | ------------------------------------ |
@@ -62,14 +62,21 @@ export type ErrorCode =
 
 画面ファイルは、サーバの実行ファイルの位置から見た `../web`（ビルド後の `dist/web`）から配信する。作業ディレクトリには依存しない。`/api` と `/healthz` 以外で該当ファイルが無いパスは、画面の入口ファイルを返す。
 
-| 環境変数                                                  | 必須 | 既定値                                  |
-| --------------------------------------------------------- | ---- | --------------------------------------- |
-| XREA_ACCOUNT・XREA_SERVER_NAME・XREA_API_SECRET_KEY       | 必須 | なし                                    |
-| PROTON_PASS_PERSONAL_ACCESS_TOKEN・PROTON_PASS_VAULT_NAME | 必須 | なし                                    |
-| BIND_ADDRESS                                              | 任意 | 127.0.0.1                               |
-| PORT                                                      | 任意 | 3000                                    |
-| SESSION_DIR                                               | 任意 | /var/lib/xrea-address-generator/session |
-| LOG_LEVEL                                                 | 任意 | info                                    |
+```ts
+// 設定の読み込み。トークン未設定のProton Pass連携は null（無効）にし、待ち受けアドレスの既定値をトンネルの有無で決める
+proton: loadProtonConfig(env), // PROTON_PASS_PERSONAL_ACCESS_TOKEN が未設定または空なら null
+bindAddress: env.BIND_ADDRESS || (env.TUNNEL_TOKEN ? "127.0.0.1" : "0.0.0.0"),
+```
+
+| 環境変数                                            | 必須 | 既定値                                                  |
+| --------------------------------------------------- | ---- | ------------------------------------------------------- |
+| XREA_ACCOUNT・XREA_SERVER_NAME・XREA_API_SECRET_KEY | 必須 | なし                                                    |
+| PROTON_PASS_PERSONAL_ACCESS_TOKEN                   | 任意 | なし（未設定または空ならProton Pass連携を無効にする）   |
+| TUNNEL_TOKEN                                        | 任意 | なし（BIND_ADDRESS の既定値を決めるためだけに参照する） |
+| BIND_ADDRESS                                        | 任意 | TUNNEL_TOKEN があれば 127.0.0.1、無ければ 0.0.0.0       |
+| PORT                                                | 任意 | 3000                                                    |
+| SESSION_DIR                                         | 任意 | /var/lib/xrea-address-generator/session                 |
+| LOG_LEVEL                                           | 任意 | info                                                    |
 
 ### D-2: 一覧の合成 (FR-1, FR-2, FR-3)
 
@@ -188,12 +195,13 @@ return proton.getStatus()
 void proton.refresh() // 完了を待たずに 202 を返す
 ```
 
-| 状態    | 画面へ伝える意味                       |
-| ------- | -------------------------------------- |
-| loading | 取得中                                 |
-| relogin | セッション失効による再ログイン中       |
-| ready   | 照合結果が利用できる                   |
-| error   | 取得に失敗した。種別とメッセージを伴う |
+| 状態     | 画面へ伝える意味                           |
+| -------- | ------------------------------------------ |
+| loading  | 取得中                                     |
+| relogin  | セッション失効による再ログイン中           |
+| ready    | 照合結果が利用できる                       |
+| error    | 取得に失敗した。種別とメッセージを伴う     |
+| disabled | アクセストークンが未設定で、連携を使わない |
 
 ### D-7: キャッシュ・排他・応答時間 (NFR-1, NFR-2, NFR-3, NFR-4)
 

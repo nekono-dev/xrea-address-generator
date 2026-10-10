@@ -33,7 +33,7 @@ const confValue = (k: string) => inC(`sed -n "s/^${k}='\\(.*\\)'$/\\1/p" ${CONF}
 async function waitHealthy(limitMs: number): Promise<number> {
   const start = Date.now()
   while (Date.now() - start < limitMs) {
-    if (inC("curl -fsS -m 2 http://127.0.0.1:3000/healthz").out.includes('"ok":true')) return Date.now() - start
+    if (inC("wget -qO- -T 2 http://127.0.0.1:3000/healthz").out.includes('"ok":true')) return Date.now() - start
     await sleep(250)
   }
   throw new Error("死活確認が成功しません")
@@ -44,7 +44,6 @@ const secrets = {
   XREA_SERVER_NAME: process.env.XREA_SERVER_NAME ?? "s1.example.test",
   XREA_API_SECRET_KEY: process.env.XREA_API_SECRET_KEY ?? "dummy",
   PROTON_PASS_PERSONAL_ACCESS_TOKEN: process.env.PROTON_PASS_PERSONAL_ACCESS_TOKEN ?? "dummy",
-  PROTON_PASS_VAULT_NAME: process.env.PROTON_PASS_VAULT_NAME ?? "dummy",
 }
 const account = process.env.XREA_ACCOUNT ?? "dummy-account"
 let commit = ""
@@ -91,7 +90,8 @@ describe.runIf(live)("LXDコンテナでの導入", () => {
       const r = inC("sh /root/install.sh install")
       expect(r.code).not.toBe(0)
       expect(r.out).toContain("必須の設定がありません")
-      for (const k of ["XREA_ACCOUNT", "XREA_SERVER_NAME", "XREA_API_SECRET_KEY", "PROTON_PASS_PERSONAL_ACCESS_TOKEN", "PROTON_PASS_VAULT_NAME"]) expect(r.out).toContain(k)
+      for (const k of ["XREA_ACCOUNT", "XREA_SERVER_NAME", "XREA_API_SECRET_KEY"]) expect(r.out).toContain(k)
+      expect(r.out).not.toContain("PROTON_PASS_PERSONAL_ACCESS_TOKEN")
       expect(exists(`/etc/${APP}`)).toBe(false)
       expect(exists(`/etc/systemd/system/${APP}.service`)).toBe(false)
     }, LONG)
@@ -176,17 +176,39 @@ describe.runIf(live)("LXDコンテナでの導入", () => {
       expect(confValue("XREA_ACCOUNT")).toBe(account)
     }, LONG)
 
-    test("lxc-installer/AC-12: アプリのポートが、コンテナの内側のループバックでだけ応答する", () => {
+    test("lxc-installer/AC-12: トンネルのトークンがあるとき、アプリのポートが、コンテナの内側のループバックでだけ応答する", () => {
+      // 待ち受けアドレスを空にして、トンネルのトークンの有無による既定の決定を確かめる
+      ok("sh /root/install.sh install --set BIND_ADDRESS= --set TUNNEL_TOKEN=dummy-token-for-test")
+      expect(confValue("BIND_ADDRESS")).toBe("")
       const listen = ok("ss -ltnH")
       expect(listen).toMatch(/127\.0\.0\.1:3000\s/)
       expect(listen).not.toMatch(/(0\.0\.0\.0|\*|\[::\]):3000\s/)
-    })
+    }, LONG)
 
-    test("lxc-installer/AC-17: コンテナの外部アドレスからアプリのポートへ接続できない", () => {
+    test("lxc-installer/AC-17: トンネルのトークンがあるとき、コンテナの外部アドレスからアプリのポートへ接続できない", async () => {
+      await waitHealthy(30_000)
       const ip = ok("hostname -I").split(/\s+/)[0]!
       const r = spawnSync("curl", ["-s", "-m", "3", `http://${ip}:3000/healthz`], { encoding: "utf8" })
       expect(r.status).not.toBe(0)
     })
+
+    test("lxc-installer/AC-19: トンネルのトークンが無いとき、アプリのポートがコンテナの外部アドレスから応答する", async () => {
+      ok("sh /root/install.sh install --set BIND_ADDRESS= --set TUNNEL_TOKEN=")
+      expect(exists("/etc/systemd/system/cloudflared-xrea.service")).toBe(false)
+      await waitHealthy(30_000)
+      expect(ok("ss -ltnH")).toMatch(/(0\.0\.0\.0|\*):3000\s/)
+      const ip = ok("hostname -I").split(/\s+/)[0]!
+      const r = spawnSync("curl", ["-s", "-m", "3", `http://${ip}:3000/healthz`], { encoding: "utf8" })
+      expect(r.stdout).toContain('"ok":true')
+    }, LONG)
+
+    test("lxc-installer/AC-20: Proton Passのアクセストークンを指定せずに導入でき、導入後にサービスが稼働する", async () => {
+      ok("sh /root/install.sh install --set PROTON_PASS_PERSONAL_ACCESS_TOKEN=")
+      expect(confValue("PROTON_PASS_PERSONAL_ACCESS_TOKEN")).toBe("")
+      expect(ok(`systemctl is-active ${APP}`)).toBe("active")
+      await waitHealthy(30_000)
+      expect(JSON.parse(ok("wget -qO- http://127.0.0.1:3000/api/proton/status")).state).toBe("disabled")
+    }, LONG)
 
     test("lxc-installer/AC-16: サービスの起動から死活確認が成功するまでが、30秒以内である", async () => {
       ok(`systemctl restart ${APP}`)

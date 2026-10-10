@@ -1,0 +1,6 @@
+# TUNNEL_TOKEN を設定せず、LANだけで使うときの追加定義。compose.yaml に重ねて指定する
+#   docker compose -f compose.yaml -f compose.lan.yaml up -d
+services:
+  app:
+    ports:
+      - 3000:3000

@@ -6,6 +6,7 @@
 | ---------------------------------- | ----------------------------------------------------------------------------------------- |
 | `Dockerfile`                       | アプリのコンテナイメージの作成                                                            |
 | `compose.yaml`                     | アプリとCloudflare Tunnelの2コンテナの定義                                                |
+| `compose.lan.yaml`                 | トンネルを使わないときの、アプリのポートの公開の追加定義                                  |
 | `.env.example`                     | 環境変数の記入例                                                                          |
 | `tests/docker/env.test.ts`         | 記入例の変数の網羅を確認するテスト                                                        |
 | `tests/docker/docker.live.test.ts` | 検証サーバでのイメージ・Compose・公開経路・再起動のテスト（DOCKER_LIVE=1 のときだけ実行） |
@@ -55,7 +56,7 @@ CMD ["node", "/app/dist/server/main.js"]
 | 実行ユーザー   | node（非特権）                                                                  |
 | サイズ         | 開発用の依存と取得用の道具をイメージに残さず、500メガバイト以下に収める         |
 
-### D-2: Docker Compose (FR-2, FR-3, NFR-3)
+### D-2: Docker Compose (FR-2, FR-3, FR-7, NFR-3)
 
 ```yaml
 services:
@@ -83,6 +84,7 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     command: tunnel --no-autoupdate run
+    deploy: { replicas: 0${TUNNEL_TOKEN:+1} } # トークンが空なら 0、あれば 1 になる
     environment: { TUNNEL_TOKEN: "${TUNNEL_TOKEN}" }
     depends_on: { app: { condition: service_healthy } }
     restart: unless-stopped
@@ -90,29 +92,37 @@ volumes:
   proton-session:
 ```
 
+```yaml
+# compose.lan.yaml（トンネルを使わないとき、compose.yaml に重ねて指定する）
+# docker compose -f compose.yaml -f compose.lan.yaml up -d
+services:
+  app:
+    ports: ["3000:3000"]
+```
+
 | 方針             | 内容                                                                  |
 | ---------------- | --------------------------------------------------------------------- |
-| ポート           | どのサービスにも ports を書かず、ホストへ公開しない                   |
+| ポート           | compose.yaml のどのサービスにも ports を書かず、ホストへ公開しない    |
+| LAN用の公開      | トークンが空のときだけ、compose.lan.yaml でアプリのポートを公開する   |
 | 永続化           | 名前付きボリューム1つ（セッションの保存先）のみ                       |
 | トンネルの接続先 | Cloudflareの管理画面で、公開ホスト名の接続先を http://app:3000 にする |
 
 ### D-3: 環境変数の記入例 (FR-4)
 
-| 変数                              | 必須 | 既定値 | 内容                           |
-| --------------------------------- | ---- | ------ | ------------------------------ |
-| XREA_ACCOUNT                      | 必須 | なし   | XREAのアカウントID             |
-| XREA_SERVER_NAME                  | 必須 | なし   | XREAのサーバ名                 |
-| XREA_API_SECRET_KEY               | 必須 | なし   | XREAのAPIシークレットキー      |
-| PROTON_PASS_PERSONAL_ACCESS_TOKEN | 必須 | なし   | 読み取り専用のアクセストークン |
-| PROTON_PASS_VAULT_NAME            | 必須 | なし   | 照合に使うVault名              |
-| TUNNEL_TOKEN                      | 任意 | なし   | Cloudflare Tunnelのトークン    |
-| LOG_LEVEL                         | 任意 | info   | ログの詳細度                   |
+| 変数                              | 必須 | 既定値 | 内容                                                            |
+| --------------------------------- | ---- | ------ | --------------------------------------------------------------- |
+| XREA_ACCOUNT                      | 必須 | なし   | XREAのアカウントID                                              |
+| XREA_SERVER_NAME                  | 必須 | なし   | XREAのサーバ名                                                  |
+| XREA_API_SECRET_KEY               | 必須 | なし   | XREAのAPIシークレットキー                                       |
+| PROTON_PASS_PERSONAL_ACCESS_TOKEN | 任意 | なし   | 読み取り専用のアクセストークン。空ならProton Pass連携を使わない |
+| TUNNEL_TOKEN                      | 任意 | なし   | Cloudflare Tunnelのトークン。空ならトンネルを使わない           |
+| LOG_LEVEL                         | 任意 | info   | ログの詳細度                                                    |
 
 記入例のファイルには、上の全変数を値を空にして並べる。実際の値を入れた環境変数ファイルは、リポジトリへ含めない。待ち受けアドレス・ポート・セッション保存先は、Composeの定義で固定する。
 
 ```sh
-# tests/docker/env.test.ts の中核（同じ判定を TypeScript で行う）: 必須の5変数がすべて記入例に含まれる
-for k in XREA_ACCOUNT XREA_SERVER_NAME XREA_API_SECRET_KEY PROTON_PASS_PERSONAL_ACCESS_TOKEN PROTON_PASS_VAULT_NAME; do
+# tests/docker/env.test.ts の中核（同じ判定を TypeScript で行う）: 必須の3変数がすべて記入例に含まれる
+for k in XREA_ACCOUNT XREA_SERVER_NAME XREA_API_SECRET_KEY; do
   grep -q "^$k=" .env.example || { echo "不足: $k"; exit 1; }
 done
 ```

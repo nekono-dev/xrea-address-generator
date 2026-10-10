@@ -65,7 +65,7 @@ describe.runIf(live)("compose", () => {
     const v = (k: string, dummy: string) => `${k}=${process.env[k] ?? dummy}`
     fs.writeFileSync(
       envFile,
-      [v("XREA_ACCOUNT", "dummy"), v("XREA_SERVER_NAME", "dummy"), v("XREA_API_SECRET_KEY", "dummy"), v("PROTON_PASS_PERSONAL_ACCESS_TOKEN", "dummy"), v("PROTON_PASS_VAULT_NAME", "dummy")].join("\n") + "\n",
+      [v("XREA_ACCOUNT", "dummy"), v("XREA_SERVER_NAME", "dummy"), v("XREA_API_SECRET_KEY", "dummy"), v("PROTON_PASS_PERSONAL_ACCESS_TOKEN", "dummy")].join("\n") + "\n",
       { mode: 0o600 },
     )
     compose("down -v", true)

@@ -8,10 +8,11 @@ const read = (f: string) => fs.readFileSync(path.join(root, f), "utf8")
 const keys = (text: string) => text.split("\n").filter(l => /^[A-Z_]+=/.test(l)).map(l => l.split("=")[0])
 
 describe("環境変数の記入例", () => {
-  test("docker-deploy/AC-4: 記入例が必須の環境変数を5個すべて含む", () => {
+  test("docker-deploy/AC-4: 記入例が必須の環境変数を3個すべてと、任意の環境変数を含む", () => {
     const example = keys(read(".env.example"))
-    expect(REQUIRED_ENV).toHaveLength(5)
-    for (const k of REQUIRED_ENV) expect(example).toContain(k)
+    expect(REQUIRED_ENV).toHaveLength(3)
+    for (const k of [...REQUIRED_ENV, "PROTON_PASS_PERSONAL_ACCESS_TOKEN", "TUNNEL_TOKEN"]) expect(example).toContain(k)
+    expect(example).not.toContain("PROTON_PASS_VAULT_NAME")
   })
 
   test("記入例に秘匿値を書き込まず、実際の値を入れたファイルをイメージとリポジトリに含めない", () => {
@@ -25,5 +26,13 @@ describe("環境変数の記入例", () => {
     const compose = read("compose.yaml")
     expect(compose).not.toMatch(/^\s*ports:/m)
     expect(compose.match(/^\s+- [\w-]+:\/var\/lib\/xrea-address-generator\/session$/gm)).toHaveLength(1)
+  })
+
+  test("docker-deploy/AC-10: TUNNEL_TOKEN が空ならトンネルのコンテナを起動せず、LAN用の定義でアプリのポートを公開する", () => {
+    const compose = read("compose.yaml")
+    expect(compose).toMatch(/replicas: 0\$\{TUNNEL_TOKEN:\+1\}/)
+    const lan = read("compose.lan.yaml")
+    expect(lan).toMatch(/^\s+ports:\n\s+- 3000:3000$/m)
+    expect(lan).not.toMatch(/cloudflared/)
   })
 })

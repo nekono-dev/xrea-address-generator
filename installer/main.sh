@@ -29,17 +29,17 @@ app_install() {
   [ "${ID:-}" = "ubuntu" ] || die "Ubuntu のみ対応しています（検出: ${ID:-不明}）"
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -q
-  apt-get install -y -q curl jq ca-certificates
+  apt-get install -y -q wget jq ca-certificates
   if [ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)" != "22" ]; then
-    curl -fsSL https://deb.nodesource.com/setup_22.x | sh
+    wget -qO- https://deb.nodesource.com/setup_22.x | sh
     apt-get install -y -q nodejs
   fi
-  _m=$(curl -fsSL https://proton.me/download/pass-cli/versions.json)
+  _m=$(wget -qO- https://proton.me/download/pass-cli/versions.json)
   _a=$(uname -m)
   _u=$(printf '%s' "$_m" | jq -r ".passCliVersions.urls.linux.$_a.url")
   _s=$(printf '%s' "$_m" | jq -r ".passCliVersions.urls.linux.$_a.hash")
   [ -n "$_u" ] && [ "$_u" != "null" ] || die "Proton Pass CLI の配布物が見つかりません（$_a）"
-  curl -fsSL -o /tmp/pass-cli.download "$_u"
+  wget -q -O /tmp/pass-cli.download "$_u"
   echo "$_s  /tmp/pass-cli.download" | sha256sum -c - || { rm -f /tmp/pass-cli.download; die "Proton Pass CLI のハッシュが一致しません"; }
   install -m 0755 /tmp/pass-cli.download /usr/local/bin/pass-cli
   rm -f /tmp/pass-cli.download
@@ -78,7 +78,7 @@ UNIT
   if [ -n "${TUNNEL_TOKEN:-}" ]; then
     if ! command -v cloudflared >/dev/null 2>&1; then
       install -d -m 0755 /usr/share/keyrings
-      curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
+      wget -q -O /usr/share/keyrings/cloudflare-main.gpg https://pkg.cloudflare.com/cloudflare-main.gpg
       echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' > /etc/apt/sources.list.d/cloudflared.list
       apt-get update -q
       apt-get install -y -q cloudflared

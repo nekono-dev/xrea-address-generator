@@ -24,3 +24,17 @@ export function project(rawJson: string): Projection {
   for (const [k, v] of map) map.set(k, v.sort((a, b) => a.localeCompare(b)))
   return { map, itemCount: items.length }
 }
+
+/** Vault一覧の出力から、各Vaultの共有IDを取り出す */
+export function vaultShareIds(rawJson: string): string[] {
+  const parsed = JSON.parse(rawJson) as { vaults?: { share_id?: string }[] }
+  return (parsed.vaults ?? []).map(v => v.share_id).filter((id): id is string => !!id)
+}
+
+/** 複数のVaultの変換結果を1つの対応表にまとめる（エントリ名は昇順） */
+export function mergeProjections(list: readonly Projection[]): Projection {
+  const map = new Map<string, string[]>()
+  for (const p of list) for (const [addr, titles] of p.map) map.set(addr, [...(map.get(addr) ?? []), ...titles])
+  for (const [k, v] of map) map.set(k, v.sort((a, b) => a.localeCompare(b)))
+  return { map, itemCount: list.reduce((n, p) => n + p.itemCount, 0) }
+}

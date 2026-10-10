@@ -1,6 +1,6 @@
 // 外部へ公開するインターフェース。
 import { createCliRunner, type CliRunner } from "./cli"
-import { CachedReader, type Logger, type ProtonReader } from "./cache"
+import { CachedReader, DisabledReader, type Logger, type ProtonReader } from "./cache"
 import { Session } from "./session"
 
 export type { AddressMap } from "./projection"
@@ -9,21 +9,17 @@ export type { ErrorKind } from "./cli"
 
 export const DEFAULT_SESSION_DIR = "/var/lib/xrea-address-generator/session"
 
-export type ProtonConfig = { token: string; vault: string; sessionDir: string }
+export type ProtonConfig = { token: string; sessionDir: string }
 
-/** 環境変数から設定を読む。必須の変数が無ければ変数名を示して例外を送出する */
-export function loadProtonConfig(env: NodeJS.ProcessEnv = process.env): ProtonConfig {
-  const missing = ["PROTON_PASS_PERSONAL_ACCESS_TOKEN", "PROTON_PASS_VAULT_NAME"].filter(k => !env[k])
-  if (missing.length) throw new Error(`必須の環境変数が未設定: ${missing.join(", ")}`)
-  return {
-    token: env.PROTON_PASS_PERSONAL_ACCESS_TOKEN!,
-    vault: env.PROTON_PASS_VAULT_NAME!,
-    sessionDir: env.SESSION_DIR || DEFAULT_SESSION_DIR,
-  }
+/** 環境変数から設定を読む。トークンが未設定なら連携を無効にするため null を返す */
+export function loadProtonConfig(env: NodeJS.ProcessEnv = process.env): ProtonConfig | null {
+  if (!env.PROTON_PASS_PERSONAL_ACCESS_TOKEN) return null
+  return { token: env.PROTON_PASS_PERSONAL_ACCESS_TOKEN, sessionDir: env.SESSION_DIR || DEFAULT_SESSION_DIR }
 }
 
 /** 読み取りの部品を組み立て、起動直後の再取得を開始する */
-export function createProtonReader(config: ProtonConfig, opts: { bin?: string; logger?: Logger } = {}): ProtonReader {
+export function createProtonReader(config: ProtonConfig | null, opts: { bin?: string; logger?: Logger } = {}): ProtonReader {
+  if (!config) return new DisabledReader()
   const base = createCliRunner({ token: config.token, sessionDir: config.sessionDir, bin: opts.bin })
   // ログインの実行を記録する（トークンやセッションの内容は出さない）
   const run: CliRunner = async args => {
@@ -32,7 +28,7 @@ export function createProtonReader(config: ProtonConfig, opts: { bin?: string; l
     return r
   }
   const session = new Session(run, config.sessionDir)
-  const reader = new CachedReader({ run, session, vault: config.vault, logger: opts.logger })
+  const reader = new CachedReader({ run, session, logger: opts.logger })
   void session
     .ensure()
     .catch(() => undefined)
