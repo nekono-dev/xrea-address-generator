@@ -1,0 +1,45 @@
+{
+  "name": "xrea-address-generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "XREAのメール転送アドレスをワンボタンで発行・管理するWebアプリ",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint:spec": "prettier --check specs && node .claude/skills/spec-driven-development/scripts/check-all.mjs",
+    "test:spec": "node .claude/skills/spec-driven-development/scripts/selftest.mjs",
+    "build": "npm run build:server && npm run build:web",
+    "build:server": "esbuild src/server/main.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/server/main.js",
+    "build:web": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "docs:check": "tsx scripts/xrea-docs/fetch.ts check",
+    "docs:snapshot": "tsx scripts/xrea-docs/fetch.ts snapshot",
+    "docs:generate": "tsx scripts/xrea-docs/generate.ts",
+    "docs:types": "openapi-typescript api/xrea.openapi.yaml --default-non-nullable false -o src/xrea/generated/schema.d.ts",
+    "docs:all": "npm run docs:generate && npm run docs:types"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63",
+    "@preact/preset-vite": "^2.10.6",
+    "@testing-library/preact": "^3.2.4",
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.28.2",
+    "happy-dom": "^20.14.6",
+    "node-html-parser": "^9.0.4",
+    "openapi-typescript": "^7.13.0",
+    "prettier": "^3.3.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3",
+    "yaml": "^2.9.1"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.4",
+    "hono": "^4.13.13",
+    "preact": "^11.0.1"
+  }
+}

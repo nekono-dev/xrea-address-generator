@@ -1,0 +1,427 @@
+<h2 id="request">Request</h2>
+
+<h3 id="url">URL</h3>
+
+<p><code class="highlighter-rouge">POST /v1/mail/list</code></p>
+
+<h3 id="param">Param</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>key</th>
+      <th>value</th>
+      <th>type</th>
+      <th>default</th>
+      <th>必須</th>
+      <th>備考</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>account</td>
+      <td>xxxxxxxxx</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>account_id</td>
+    </tr>
+    <tr>
+      <td>server_name</td>
+      <td>s1001.xrea.com</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>server_name</td>
+    </tr>
+    <tr>
+      <td>api_secret_key</td>
+      <td>xxxxxxxxx</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>api_secret_key</td>
+    </tr>
+    <tr>
+      <td>grep</td>
+      <td>xxxx</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>✕</td>
+      <td>検索文字列</td>
+    </tr>
+    <tr>
+      <td>grep_type</td>
+      <td>front|back|both|match</td>
+      <td>string</td>
+      <td>match</td>
+      <td>✕</td>
+      <td>検索条件(front:前方一致 back:後方一致 both:部分一致)</td>
+    </tr>
+    <tr>
+      <td>page</td>
+      <td>1-999</td>
+      <td>int</td>
+      <td>1</td>
+      <td>✕</td>
+      <td>ページ数</td>
+    </tr>
+    <tr>
+      <td>limit</td>
+      <td>1-999</td>
+      <td>int</td>
+      <td>無し</td>
+      <td>✕</td>
+      <td>limit</td>
+    </tr>
+    <tr>
+      <td>offset</td>
+      <td>1-999</td>
+      <td>int</td>
+      <td>無し</td>
+      <td>✕</td>
+      <td>offset</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="paramsample">ParamSample</h3>
+<p><code class="highlighter-rouge">{
+    "account"         : "xxxxxxxxxxxx",
+    "server_name"     : "s1001.xrea.com",
+    "api_secret_key"  : "xxxxxxxxxxxx" ,
+    "grep"            : "example" 
+    "page"            : "1" 
+    "limit"           : "30" 
+    "offset"          : "0" 
+}</code></p>
+
+<hr />
+
+<h2 id="response">Response</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>key</th>
+      <th>value</th>
+      <th>type</th>
+      <th>default</th>
+      <th>必須</th>
+      <th>備考</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>account</td>
+      <td>xxxxxxxxx</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>account_id</td>
+    </tr>
+    <tr>
+      <td>result</td>
+      <td> </td>
+      <td> </td>
+      <td> </td>
+      <td> </td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td>address_name</td>
+      <td>xxx</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>メールアカウント名</td>
+    </tr>
+    <tr>
+      <td>address_domain</td>
+      <td>xxx.com</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>メールドメイン</td>
+    </tr>
+    <tr>
+      <td>pop_how</td>
+      <td>1-4</td>
+      <td>int</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>受信方法(1:転送のみ 2:POP/WEB受信のみ 3:両方(転送+POP/WEB受信) 4:破棄)</td>
+    </tr>
+    <tr>
+      <td>address_trans</td>
+      <td>www.example.com</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>✕</td>
+      <td>転送先メールアドレス</td>
+    </tr>
+    <tr>
+      <td>pop_pass</td>
+      <td>xxxxxxxx</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>✕</td>
+      <td>popメールパスワード</td>
+    </tr>
+    <tr>
+      <td>quota</td>
+      <td>1-</td>
+      <td>int</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>使用可能サイズ</td>
+    </tr>
+    <tr>
+      <td>quota_use_byte</td>
+      <td>1-</td>
+      <td>int</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>使用済サイズ（byte）</td>
+    </tr>
+    <tr>
+      <td>quota_use_per</td>
+      <td>1-100</td>
+      <td>int</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>使用済パーセント</td>
+    </tr>
+    <tr>
+      <td>mail_num</td>
+      <td>1-</td>
+      <td>int</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>メール数</td>
+    </tr>
+    <tr>
+      <td>autorespond</td>
+      <td>0|1</td>
+      <td>int</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>自動返信設定</td>
+    </tr>
+    <tr>
+      <td>autorespond_body</td>
+      <td>xxxxx</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>✕</td>
+      <td>自動返信設定</td>
+    </tr>
+    <tr>
+      <td>clamd</td>
+      <td>0|1</td>
+      <td>int</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>ウイルスフィルター設定</td>
+    </tr>
+    <tr>
+      <td>spamd</td>
+      <td>0|1</td>
+      <td>int</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>スパムフィルター設定</td>
+    </tr>
+    <tr>
+      <td>customd</td>
+      <td>0|1</td>
+      <td>int</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>カスタムフィルター設定</td>
+    </tr>
+    <tr>
+      <td>customd_body</td>
+      <td>array</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>✕</td>
+      <td>カスタムフィルター内容 <br />※下記に別途項目記載</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="下記customd_body"><span style="color:red;">下記customd_body</span></h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>key</th>
+      <th>value</th>
+      <th>type</th>
+      <th>default</th>
+      <th>必須</th>
+      <th>備考</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>allow_stringcase</td>
+      <td>0|1</td>
+      <td>int</td>
+      <td>0</td>
+      <td>✕</td>
+      <td>大文字小文字の区別をするか</td>
+    </tr>
+    <tr>
+      <td>save_mail</td>
+      <td>0|1</td>
+      <td>int</td>
+      <td>0</td>
+      <td>✕</td>
+      <td>メールを残すか</td>
+    </tr>
+    <tr>
+      <td>action_type</td>
+      <td>xxxxxx</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>forward：メール転送<br />maildir：振り分け<br />change_subject：題名変更<br />change_from：from変更<br />add_header：header追加<br />delete：破棄</td>
+    </tr>
+    <tr>
+      <td>action_body</td>
+      <td>xxxxxx</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>✕</td>
+      <td>example@example.com</td>
+    </tr>
+    <tr>
+      <td>conditions</td>
+      <td> </td>
+      <td> </td>
+      <td> </td>
+      <td> </td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td>target</td>
+      <td>xxxx</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>○</td>
+      <td>all：全て<br /> header_all：ヘッダ全体<br /> from： From(差出人)<br /> to： To(宛先)<br /> cc： CC<br /> tocc： ToまたはCC<br /> subject： Subject(題名)<br /> japanese：題名に日本語を含む<br /> notjapanese：題名に日本語を含まない<br /> all_japanese：全体に日本語を含む<br /> all_notjapanese：全体に日本語を含まない<br /></td>
+    </tr>
+  </tbody>
+</table>
+
+<table>
+  <tbody>
+    <tr>
+      <td>body</td>
+      <td>xxxxxx</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>✕</td>
+      <td>targetに沿った内容(targetによっては必須)</td>
+    </tr>
+    <tr>
+      <td>condition</td>
+      <td>xxxxxx</td>
+      <td>string</td>
+      <td>無し</td>
+      <td>✕</td>
+      <td>match：を含む<br />notmatch：を含まない<br />byte_below：バイト以下<br />byte_above：バイト以上<br />none：指定無し(japaneseやnotjapanese等)<br /></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="responsesample">ResponseSample</h3>
+<h4 id="ok">OK</h4>
+
+<p><code class="highlighter-rouge">{
+    "status_code" : 200,
+    "message"     : "",
+    "result"      : {
+        "1":{
+            "no"                : 1,
+            "address_name"      : example,
+            "address_domain"    : example.com,
+            "pop_how"           : 1,
+            "address_trans"     : exampletrans@example.com,
+            "pop_pass"          : xxxxxxxxxx,
+            "quota"             : 100000 // バイト
+            "quota_use_byte"    : 50000  // 使用済サイズ
+            "quota_use_per"     : 50     // 使用済パーセント
+            "mail_num"          : 120    // メール数
+            "autorespond"      : 1      // 自動返信
+            "autorespond_body" : "xxx"  // 自動返信内容
+            "clamd"             : 1      // ウイルスフィルター
+            "spamd"             : 1      // スパムフィルター
+            "customd"           : 1      // カスタムフィルター
+            "customd_body"  : {   // カスタムフィルター内容
+                     {
+                         "allow_stringcase" : 0,
+                         "save_mail"    : 0,
+                         "conditions :   {
+                                         "1" : {
+                                            "no"        : 1,
+                                            "target"    : "all",
+                                            "body"      : "example_string",
+                                            "condition" : "match"
+                                         },
+                                         "2" : {
+                                            "no"        : 2,
+                                            "target"    : "subject",
+                                            "body"      : "sibject_ignore",
+                                            "condition" : "notmatch"
+                                         }
+                                      },
+                         "action_body"      : "example@example.com",
+                         "action_type"      : "forward",
+                     },
+            }
+        },
+        "2":{
+            "no"                : 2,
+            "address_name"      : example,
+            "address_domain"    : example2.com,
+            "pop_how"           : 1,
+            "address_trans"     : exampletrans@example.com,
+            "pop_pass"          : xxxxxxxxxx,
+            "quota"             : 100000 // バイト
+            "quota_use_byte"    : 50000  // 使用済サイズ
+            "quota_use_per"     : 50     // 使用済パーセント
+            "mail_num"          : 120    // メール数
+            "autorespond"      : 1      // 自動返信
+            "autorespond_body" : "xxx"  // 自動返信内容
+            "clamd"             : 1      // ウイルスフィルター
+            "spamd"             : 1      // スパムフィルター
+            "customd"           : 1      // カスタムフィルター
+            "customd_body"  : {   // カスタムフィルター内容
+                     {
+                         "allow_stringcase" : 0,
+                         "save_mail"    : 0,
+                         "conditions :   {
+                                         "1" : {
+                                            "no"        : 1,
+                                            "target"    : "all",
+                                            "body"      : "example_string",
+                                            "condition" : "match"
+                                         },
+                                         "2" : {
+                                            "no"        : 2,
+                                            "target"    : "subject",
+                                            "body"      : "sibject_ignore",
+                                            "condition" : "notmatch"
+                                         }
+                                      },
+                         "action_body"      : "example@example.com",
+                         "action_type"      : "forward",
+                     },
+            }
+        },
+    },
+}</code></p>
+

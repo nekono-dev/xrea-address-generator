@@ -1,0 +1,518 @@
+components:
+  schemas:
+    v1_mail_delete_param:
+      properties:
+        no:
+          description: no
+          items:
+            type: integer
+          type: array
+      required:
+        - no
+      type: object
+    v1_mail_edit_param:
+      properties:
+        address:
+          description: メールアカウント
+          examples:
+            - xxx@xxx.com
+          type: string
+        address_domain:
+          description: メールドメイン
+          examples:
+            - xxx.com
+          type: string
+        address_name:
+          description: メールアカウント名
+          examples:
+            - xxx
+          type: string
+        address_trans:
+          description: 転送先メールアドレス
+          examples:
+            - www.example.com
+          type: string
+        autorespond:
+          description: 自動返信設定
+          enum:
+            - 0
+            - 1
+          type: integer
+        autorespond_body:
+          description: 自動返信設定
+          examples:
+            - xxxxx
+          type: string
+        clamd:
+          description: ウイルスフィルター設定
+          enum:
+            - 0
+            - 1
+          type: integer
+        customd:
+          description: カスタムフィルター設定
+          enum:
+            - 0
+            - 1
+          type: integer
+        customd_body:
+          description: カスタムフィルター内容 ※下記に別途項目記載
+          items:
+            $ref: "#/components/schemas/v1_mail_edit_param_customd_body"
+          type: array
+        force:
+          default: 0
+          description: ドメインが当サーバに向いているか確認の有無(A/MX)
+          enum:
+            - 0
+            - 1
+          type: integer
+        pop_how:
+          description: 受信方法（1 転送のみ、2 受信のみ、3 転送と受信の両方、4 破棄）
+          enum:
+            - 1
+            - 2
+            - 3
+            - 4
+          type: integer
+        pop_pass:
+          description: popメールパスワード
+          examples:
+            - xxxxxxxx
+          type: string
+        pop_pass_rand:
+          default: 0
+          description: 1にした場合パスワードをランダムで変更
+          enum:
+            - 0
+            - 1
+          type: integer
+        quota:
+          description: 使用可能サイズ
+          minimum: 0
+          type: integer
+        spamd:
+          description: スパムフィルター設定
+          enum:
+            - 0
+            - 1
+          type: integer
+      required:
+        - address
+        - address_domain
+        - address_name
+        - autorespond
+        - clamd
+        - customd
+        - pop_how
+        - quota
+        - spamd
+      type: object
+    v1_mail_edit_param_customd_body:
+      properties:
+        action_body:
+          description: ※ 例外として、削除する場合のみ非必須
+          examples:
+            - xxxxxx
+          type: string
+        action_type:
+          description: forward：メール転送 maildir：振り分け change_subject：題名変更 change_from：from変更 add_header：header追加 delete：破棄
+          examples:
+            - xxxxxx
+          type: string
+        allow_stringcase:
+          default: 0
+          description: 大文字小文字の区別をするか
+          enum:
+            - 0
+            - 1
+          type: integer
+        conditions:
+          $ref: "#/components/schemas/v1_mail_edit_param_customd_body_conditions"
+        save_mail:
+          default: 0
+          description: メールを残すか
+          enum:
+            - 0
+            - 1
+          type: integer
+      required:
+        - action_body
+        - action_type
+      type: object
+    v1_mail_edit_param_customd_body_conditions:
+      properties:
+        body:
+          description: targetに沿った内容(targetによっては必須)
+          examples:
+            - xxxxxx
+          type: string
+        condition:
+          description: match：を含む notmatch：を含まない byte_below：バイト以下 byte_above：バイト以上
+          examples:
+            - xxxxxx
+          type: string
+        target:
+          description: all：全て header_all：ヘッダ全体 from： From(差出人) to： To(宛先) cc： CC tocc： ToまたはCC subject： Subject(題名) japanese：題名に日本語を含む notjapanese：題名に日本語を含まない all_japanese：全体に日本語を含む all_notjapanese：全体に日本語を含まない
+          examples:
+            - xxxx
+          type: string
+      required:
+        - target
+      type: object
+    v1_mail_list_response_result:
+      properties:
+        address:
+          type: string
+        address_domain:
+          description: メールドメイン
+          examples:
+            - xxx.com
+          type: string
+        address_name:
+          description: メールアカウント名
+          examples:
+            - xxx
+          type: string
+        address_trans:
+          description: 転送先メールアドレス
+          examples:
+            - www.example.com
+          type: string
+        autorespond:
+          description: 自動返信設定
+          enum:
+            - 0
+            - 1
+          type: integer
+        autorespond_body:
+          description: 自動返信設定
+          examples:
+            - xxxxx
+          type: string
+        clamd:
+          description: ウイルスフィルター設定
+          enum:
+            - 0
+            - 1
+          type: integer
+        customd:
+          description: カスタムフィルター設定
+          enum:
+            - 0
+            - 1
+          type: integer
+        customd_body:
+          description: カスタムフィルター内容 ※下記に別途項目記載
+          items:
+            $ref: "#/components/schemas/v1_mail_list_response_result_customd_body"
+          type:
+            - string
+            - array
+        mail_num:
+          description: メール数
+          type:
+            - string
+            - integer
+        no:
+          type: integer
+        pop_how:
+          description: 受信方法（1 転送のみ、2 受信のみ、3 転送と受信の両方、4 破棄）
+          enum:
+            - 1
+            - 2
+            - 3
+            - 4
+          type: integer
+        pop_pass:
+          description: popメールパスワード
+          examples:
+            - xxxxxxxx
+          type: string
+        quota:
+          description: 使用可能サイズ
+          type: string
+        quota_use_byte:
+          description: 使用済サイズ（byte）
+          type:
+            - string
+            - integer
+        quota_use_per:
+          description: 使用済パーセント
+          type:
+            - string
+            - integer
+        spamd:
+          description: スパムフィルター設定
+          enum:
+            - 0
+            - 1
+          type: integer
+      required:
+        - address
+        - address_domain
+        - address_name
+        - address_trans
+        - no
+        - pop_how
+        - quota
+      type: object
+    v1_mail_list_response_result_customd_body:
+      properties:
+        action_body:
+          description: example@example.com
+          examples:
+            - xxxxxx
+          type: string
+        action_type:
+          description: forward：メール転送 maildir：振り分け change_subject：題名変更 change_from：from変更 add_header：header追加 delete：破棄
+          examples:
+            - xxxxxx
+          type: string
+        allow_stringcase:
+          default: 0
+          description: 大文字小文字の区別をするか
+          enum:
+            - 0
+            - 1
+          type: integer
+        conditions:
+          $ref: "#/components/schemas/v1_mail_list_response_result_customd_body_conditions"
+        save_mail:
+          default: 0
+          description: メールを残すか
+          enum:
+            - 0
+            - 1
+          type: integer
+      required:
+        - action_type
+      type: object
+    v1_mail_list_response_result_customd_body_conditions:
+      properties:
+        body:
+          description: targetに沿った内容(targetによっては必須)
+          examples:
+            - xxxxxx
+          type: string
+        condition:
+          description: match：を含む notmatch：を含まない byte_below：バイト以下 byte_above：バイト以上 none：指定無し(japaneseやnotjapanese等)
+          examples:
+            - xxxxxx
+          type: string
+        target:
+          description: all：全て header_all：ヘッダ全体 from： From(差出人) to： To(宛先) cc： CC tocc： ToまたはCC subject： Subject(題名) japanese：題名に日本語を含む notjapanese：題名に日本語を含まない all_japanese：全体に日本語を含む all_notjapanese：全体に日本語を含まない
+          examples:
+            - xxxx
+          type: string
+      required:
+        - target
+      type: object
+info:
+  title: XREA API（メール）
+  version: "1"
+openapi: 3.1.0
+paths:
+  /v1/mail/delete:
+    post:
+      operationId: v1_mail_delete
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              properties:
+                account:
+                  examples:
+                    - xxxxxx
+                  type: string
+                api_secret_key:
+                  description: api_secret_key
+                  examples:
+                    - xxxxxxxxx
+                  type: string
+                param:
+                  $ref: "#/components/schemas/v1_mail_delete_param"
+                server_name:
+                  description: server_name
+                  examples:
+                    - s1001.xrea.com
+                  type: string
+              required:
+                - account
+                - api_secret_key
+                - param
+                - server_name
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    type: string
+                  status_code:
+                    enum:
+                      - 200
+                      - 500
+                    type: integer
+                required:
+                  - status_code
+                type: object
+          description: OK
+      x-form-style: indexed
+  /v1/mail/edit:
+    post:
+      operationId: v1_mail_edit
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              properties:
+                account:
+                  description: account_id
+                  examples:
+                    - xxxxxxxxx
+                  type: string
+                api_secret_key:
+                  description: api_secret_key
+                  examples:
+                    - xxxxxxxxx
+                  type: string
+                box_reset_flg:
+                  default: 0
+                  description: 全メールボックスリセット
+                  enum:
+                    - 0
+                  type: integer
+                param:
+                  items:
+                    $ref: "#/components/schemas/v1_mail_edit_param"
+                  type: array
+                reset_flg:
+                  default: 0
+                  description: リセットフラグ
+                  enum:
+                    - 0
+                  type: integer
+                server_name:
+                  description: server_name
+                  examples:
+                    - s1001.xrea.com
+                  type: string
+              required:
+                - account
+                - api_secret_key
+                - param
+                - reset_flg
+                - server_name
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  message:
+                    type: string
+                  status_code:
+                    enum:
+                      - 200
+                      - 500
+                    type: integer
+                required:
+                  - status_code
+                type: object
+          description: OK
+      x-form-style: indexed
+  /v1/mail/list:
+    post:
+      operationId: v1_mail_list
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              properties:
+                account:
+                  description: account_id
+                  examples:
+                    - xxxxxxxxx
+                  type: string
+                api_secret_key:
+                  description: api_secret_key
+                  examples:
+                    - xxxxxxxxx
+                  type: string
+                grep:
+                  description: 検索文字列
+                  examples:
+                    - xxxx
+                  type: string
+                grep_type:
+                  default: match
+                  description: 検索条件(front:前方一致 back:後方一致 both:部分一致)
+                  enum:
+                    - front
+                    - back
+                    - both
+                    - match
+                  type: string
+                limit:
+                  description: limit
+                  examples:
+                    - 1-999
+                  type: integer
+                offset:
+                  description: offset
+                  examples:
+                    - 1-999
+                  type: integer
+                page:
+                  default: 1
+                  description: ページ数
+                  examples:
+                    - 1-999
+                  type: integer
+                server_name:
+                  description: server_name
+                  examples:
+                    - s1001.xrea.com
+                  type: string
+              required:
+                - account
+                - api_secret_key
+                - server_name
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  account:
+                    description: account_id
+                    examples:
+                      - xxxxxxxxx
+                    type: string
+                  message:
+                    type: string
+                  result:
+                    additionalProperties:
+                      $ref: "#/components/schemas/v1_mail_list_response_result"
+                    type: object
+                  status_code:
+                    enum:
+                      - 200
+                      - 500
+                    type: integer
+                required:
+                  - account
+                  - status_code
+                type: object
+          description: OK
+      x-form-style: indexed
+servers:
+  - url: https://api.xrea.com

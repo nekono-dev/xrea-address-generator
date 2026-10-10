@@ -1,0 +1,176 @@
+{
+  "items": [
+    {
+      "id": "i1",
+      "share_id": "share",
+      "vault_id": "vault",
+      "state": "Active",
+      "flags": [],
+      "create_time": "2026-01-01T00:00:00Z",
+      "modify_time": "2026-01-02T00:00:00Z",
+      "content": {
+        "title": "Amazon.co.jp",
+        "note": "メモ-i1-FIXTURE-NOTE",
+        "item_uuid": "uuid-i1",
+        "content": {
+          "Login": {
+            "email": "",
+            "username": "shop@example.com",
+            "password": "FIXTURE-SECRET-i1",
+            "urls": [
+              "https://i1.example"
+            ],
+            "totp_uri": "otpauth://totp/FIXTURE-TOTP-i1",
+            "passkeys": [],
+            "autofill_urls": []
+          }
+        },
+        "extra_fields": [],
+        "platform_specific": {
+          "android": {
+            "allowed_apps": []
+          }
+        },
+        "custom_icon": null
+      }
+    },
+    {
+      "id": "i2",
+      "share_id": "share",
+      "vault_id": "vault",
+      "state": "Active",
+      "flags": [],
+      "create_time": "2026-01-01T00:00:00Z",
+      "modify_time": "2026-01-02T00:00:00Z",
+      "content": {
+        "title": "X (Twitter)",
+        "note": "メモ-i2-FIXTURE-NOTE",
+        "item_uuid": "uuid-i2",
+        "content": {
+          "Login": {
+            "email": "SNS@Example.com",
+            "username": "",
+            "password": "FIXTURE-SECRET-i2",
+            "urls": [
+              "https://i2.example"
+            ],
+            "totp_uri": "otpauth://totp/FIXTURE-TOTP-i2",
+            "passkeys": [],
+            "autofill_urls": []
+          }
+        },
+        "extra_fields": [],
+        "platform_specific": {
+          "android": {
+            "allowed_apps": []
+          }
+        },
+        "custom_icon": null
+      }
+    },
+    {
+      "id": "i3",
+      "share_id": "share",
+      "vault_id": "vault",
+      "state": "Active",
+      "flags": [],
+      "create_time": "2026-01-01T00:00:00Z",
+      "modify_time": "2026-01-02T00:00:00Z",
+      "content": {
+        "title": "Bluesky",
+        "note": "メモ-i3-FIXTURE-NOTE",
+        "item_uuid": "uuid-i3",
+        "content": {
+          "Login": {
+            "email": "sns@example.com",
+            "username": "sns@example.com",
+            "password": "FIXTURE-SECRET-i3",
+            "urls": [
+              "https://i3.example"
+            ],
+            "totp_uri": "otpauth://totp/FIXTURE-TOTP-i3",
+            "passkeys": [],
+            "autofill_urls": []
+          }
+        },
+        "extra_fields": [],
+        "platform_specific": {
+          "android": {
+            "allowed_apps": []
+          }
+        },
+        "custom_icon": null
+      }
+    },
+    {
+      "id": "i4",
+      "share_id": "share",
+      "vault_id": "vault",
+      "state": "Trashed",
+      "flags": [],
+      "create_time": "2026-01-01T00:00:00Z",
+      "modify_time": "2026-01-02T00:00:00Z",
+      "content": {
+        "title": "ゴミ箱の項目",
+        "note": "メモ-i4-FIXTURE-NOTE",
+        "item_uuid": "uuid-i4",
+        "content": {
+          "Login": {
+            "email": "",
+            "username": "trash@example.com",
+            "password": "FIXTURE-SECRET-i4",
+            "urls": [
+              "https://i4.example"
+            ],
+            "totp_uri": "otpauth://totp/FIXTURE-TOTP-i4",
+            "passkeys": [],
+            "autofill_urls": []
+          }
+        },
+        "extra_fields": [],
+        "platform_specific": {
+          "android": {
+            "allowed_apps": []
+          }
+        },
+        "custom_icon": null
+      }
+    },
+    {
+      "id": "n1",
+      "share_id": "share",
+      "vault_id": "vault",
+      "state": "Active",
+      "flags": [],
+      "create_time": "",
+      "modify_time": "",
+      "content": {
+        "title": "メモ帳",
+        "note": "FIXTURE-SECRET-NOTE-ONLY",
+        "item_uuid": "u",
+        "content": {
+          "Note": null
+        },
+        "extra_fields": []
+      }
+    },
+    {
+      "id": "a1",
+      "share_id": "share",
+      "vault_id": "vault",
+      "state": "Active",
+      "flags": [],
+      "create_time": "",
+      "modify_time": "",
+      "content": {
+        "title": "Protonのエイリアス",
+        "note": "",
+        "item_uuid": "u2",
+        "content": {
+          "Alias": null
+        },
+        "extra_fields": []
+      }
+    }
+  ]
+}

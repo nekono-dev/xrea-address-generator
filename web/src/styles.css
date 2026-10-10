@@ -1,0 +1,461 @@
+/* 寸法・配色の定義と全部品のスタイル。ブラウザ標準の部品の見た目は使わない */
+:root {
+  --h: 38px;
+  --r: 10px;
+  --bg: #0f172a;
+  --fg: #e2e8f0;
+  --ctl: #1e293b;
+  --pop: #1e293b;
+  --line: #334155;
+  --hi: #334155;
+  --acc: #38bdf8;
+  --mut: #64748b;
+  --danger: #f87171;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  font-size: 15px;
+}
+#app {
+  display: grid;
+  justify-items: center;
+  padding-bottom: 60px;
+}
+button {
+  font: inherit;
+  color: inherit;
+}
+/* 中央寄せの内容領域。文書の幅を広げる指定（負の余白・100vw の拡張）は使わない */
+.wrap {
+  width: min(680px, 100%);
+  padding: 0 16px;
+  margin: 0 auto;
+}
+h1 {
+  font-size: 13px;
+  letter-spacing: 0.25em;
+  color: var(--mut);
+  margin: 0;
+  padding: 34px 0 18px;
+  text-align: center;
+}
+
+/* 上端に固定する全幅の帯。帯自身が背景を持つため、切り取り（overflow・clip-path）は使わない */
+.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  justify-self: stretch;
+  background: var(--bg);
+  border-bottom: 1px solid #1e293b;
+}
+.sticky .wrap {
+  padding-top: 10px;
+  padding-bottom: 14px;
+}
+.form {
+  display: grid;
+  gap: 8px;
+}
+.line {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.label {
+  align-self: center;
+  color: var(--mut);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.at {
+  align-self: center;
+  color: var(--mut);
+}
+.fld {
+  flex: 1;
+  min-width: 0;
+  height: var(--h);
+  font: inherit;
+  color: inherit;
+  background: var(--ctl);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 0 12px;
+  outline: 0;
+}
+.fld:focus {
+  border-color: var(--acc);
+}
+.fld.al {
+  text-align: right;
+}
+.fld.bad {
+  border-color: #b91c1c;
+}
+.fld::placeholder {
+  color: #64748b;
+}
+.btn {
+  height: var(--h);
+  font-weight: 700;
+  border: 0;
+  border-radius: var(--r);
+  padding: 0 22px;
+  background: var(--acc);
+  color: #082f49;
+  cursor: pointer;
+  outline: 0;
+  white-space: nowrap;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn:focus-visible {
+  box-shadow: 0 0 0 2px #fff;
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.err {
+  color: var(--danger);
+  font-size: 12px;
+  margin: 2px 4px 0;
+  min-height: 0;
+}
+
+/* ドロップダウン */
+.dd {
+  position: relative;
+  display: inline-block;
+}
+.dd-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--h);
+  background: var(--ctl);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 0 12px;
+  cursor: pointer;
+  outline: 0;
+  white-space: nowrap;
+}
+.dd-btn:focus-visible,
+.chev:focus-visible {
+  box-shadow: 0 0 0 2px var(--acc);
+}
+.dd-menu {
+  position: absolute;
+  z-index: 10;
+  left: 0;
+  top: calc(100% + 6px);
+  min-width: 100%;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--pop);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: 0 12px 30px #0006;
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 0.12s, transform 0.12s;
+}
+.open > .dd-menu {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.dd-menu li {
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dd-menu li.hi {
+  background: var(--hi);
+}
+.dd-menu li[aria-selected="true"] {
+  color: var(--acc);
+  font-weight: 600;
+}
+.dd-menu li.none {
+  color: var(--mut);
+  cursor: default;
+}
+
+/* 転送先の入力部品 */
+.cb {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.cb .fld {
+  width: 100%;
+  padding-right: 34px;
+}
+.cb .chev {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 34px;
+  height: var(--h);
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 0;
+  color: var(--mut);
+  cursor: pointer;
+  outline: 0;
+  border-radius: var(--r);
+}
+.cb .dd-menu {
+  left: 0;
+  right: 0;
+}
+
+/* 帯（再ログイン・エラー） */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: var(--r);
+  background: #422006;
+  color: #fde68a;
+  font-size: 13px;
+}
+.banner.error {
+  background: #450a0a;
+  color: #fecaca;
+}
+.sp {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex: none;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 一覧 */
+.tools {
+  display: flex;
+  align-items: center;
+  margin: 22px 0 4px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.tools h2 {
+  font-size: 12px;
+  color: var(--mut);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  margin: 0;
+  flex: 1;
+  white-space: nowrap;
+}
+.tools .dd-btn {
+  font-size: 13px;
+  height: 32px;
+}
+.seg {
+  display: inline-flex;
+  background: #1e293b;
+  border-radius: 99px;
+  padding: 3px;
+}
+.seg button {
+  font-size: 12px;
+  border: 0;
+  background: none;
+  color: var(--mut);
+  padding: 5px 12px;
+  border-radius: 99px;
+  cursor: pointer;
+  outline: 0;
+}
+.seg button[aria-pressed="true"] {
+  background: #334155;
+  color: var(--fg);
+}
+.seg button:focus-visible {
+  box-shadow: 0 0 0 2px var(--acc);
+}
+.pstat {
+  font-size: 12px;
+  color: var(--mut);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+.link {
+  font-size: 12px;
+  background: none;
+  border: 0;
+  color: var(--acc);
+  cursor: pointer;
+  padding: 2px 4px;
+  outline: 0;
+  border-radius: 4px;
+}
+.link:focus-visible {
+  box-shadow: 0 0 0 2px var(--acc);
+}
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 4px;
+  border-bottom: 1px solid #1e293b;
+  transition: background 0.4s;
+  scroll-margin-top: 140px;
+}
+.row.flash {
+  background: #38bdf822;
+}
+.row .a {
+  flex: 1;
+  min-width: 0;
+}
+.row .ad {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-all;
+}
+.row small {
+  color: var(--mut);
+  display: block;
+  word-break: break-all;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 5px;
+}
+.chip {
+  font-size: 12px;
+  color: #c4b5fd;
+  background: #2e1065;
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.chip.sk {
+  width: 90px;
+  height: 18px;
+  background: linear-gradient(90deg, #1e293b, #334155, #1e293b);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.act {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.ghost {
+  font-size: 13px;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--mut);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  outline: 0;
+  white-space: nowrap;
+}
+.ghost:hover,
+.ghost:focus-visible {
+  border-color: var(--line);
+  color: var(--fg);
+}
+.ghost.danger:hover,
+.ghost.danger:focus-visible {
+  color: var(--danger);
+  border-color: #7f1d1d;
+}
+.ghost.yes {
+  color: #fff;
+  background: #b91c1c;
+}
+.confirm {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 280px;
+  color: var(--danger);
+  font-size: 13px;
+}
+.empty {
+  color: var(--mut);
+  padding: 30px 0;
+  text-align: center;
+  font-size: 14px;
+}
+
+/* 通知 */
+.toasts {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 8px;
+  z-index: 50;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+}
+.toast {
+  padding: 10px 18px;
+  border-radius: 99px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 14px;
+  text-align: center;
+  animation: toast-in 0.2s ease-out;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (max-width: 520px) {
+  .line {
+    flex-wrap: wrap;
+  }
+  .btn {
+    flex: 1 0 100%;
+  }
+  .fld.al {
+    flex: 1 0 40%;
+  }
+}

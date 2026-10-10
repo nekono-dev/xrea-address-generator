@@ -1,0 +1,102 @@
+// 対応表のキャッシュ、再取得の合流、状態の管理。
+import { CliError, FIXED_MESSAGES, ForbiddenCommandError, type CliRunner, type ErrorKind } from "./cli"
+import { project, type AddressMap } from "./projection"
+import type { Session } from "./session"
+
+export type ReaderState = "loading" | "ready" | "relogin" | "error"
+export type Status = {
+  state: ReaderState
+  updatedAt: string | null
+  reloginAt: string | null
+  itemCount: number | null
+  error: { kind: ErrorKind; message: string } | null
+}
+export interface ProtonReader {
+  getMap(): AddressMap
+  getStatus(): Status
+  refresh(): Promise<void>
+}
+export type Logger = { info(o: object): void; warn(o: object): void }
+
+export const TTL_MS = 600_000
+const consoleLogger: Logger = {
+  info: o => console.log(JSON.stringify({ level: "info", ...o })),
+  warn: o => console.warn(JSON.stringify({ level: "warn", ...o })),
+}
+
+export class CachedReader implements ProtonReader {
+  private map: AddressMap = new Map()
+  private fetchedAt: number | null = null
+  private inflight: Promise<void> | null = null
+  private status: Status = { state: "loading", updatedAt: null, reloginAt: null, itemCount: null, error: null }
+
+  constructor(
+    private readonly opts: {
+      run: CliRunner
+      session: Session
+      vault: string
+      ttlMs?: number
+      now?: () => number
+      logger?: Logger
+    },
+  ) {}
+
+  private now(): number {
+    return (this.opts.now ?? Date.now)()
+  }
+
+  getMap(): AddressMap {
+    const ttl = this.opts.ttlMs ?? TTL_MS
+    if (this.fetchedAt !== null && this.now() - this.fetchedAt >= ttl && !this.inflight) void this.refresh()
+    return this.map
+  }
+
+  getStatus(): Status {
+    return { ...this.status }
+  }
+
+  refresh(): Promise<void> {
+    this.inflight ??= this.doRefresh().finally(() => {
+      this.inflight = null
+    })
+    return this.inflight
+  }
+
+  private async doRefresh(): Promise<void> {
+    const log = this.opts.logger ?? consoleLogger
+    this.status = { ...this.status, state: "loading", error: null }
+    const args = ["item", "list", "--vault-name", this.opts.vault, "--filter-state", "active", "--output", "json", "--show-secrets"]
+    try {
+      let relogged = false
+      // 取得結果の文字列は変数に保持せず、変換関数の戻り値だけを受け取る
+      const { result, durationMs } = await this.opts.session.withSession(
+        async () => {
+          const r = await this.opts.run(args)
+          return { result: project(r.stdout), durationMs: r.durationMs }
+        },
+        () => {
+          relogged = true
+          this.status = { ...this.status, state: "relogin" }
+          log.warn({ cmd: "login", reason: "session_expired" })
+        },
+      )
+      this.map = result.map
+      this.fetchedAt = this.now()
+      const at = new Date(this.now()).toISOString()
+      this.status = {
+        state: "ready",
+        updatedAt: at,
+        reloginAt: relogged ? at : this.status.reloginAt,
+        itemCount: result.itemCount,
+        error: null,
+      }
+      log.info({ cmd: "item list", exitCode: 0, durationMs, itemCount: result.itemCount })
+    } catch (e) {
+      const kind: ErrorKind = e instanceof CliError ? e.kind : e instanceof ForbiddenCommandError ? "cli" : "unknown"
+      const message = e instanceof CliError ? e.message : FIXED_MESSAGES[kind]
+      // 直前の対応表を保持し、状態を error にする
+      this.status = { ...this.status, state: "error", error: { kind, message } }
+      log.warn({ cmd: "item list", exitCode: 1, kind })
+    }
+  }
+}

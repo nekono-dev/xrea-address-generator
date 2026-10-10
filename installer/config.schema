@@ -1,0 +1,10 @@
+XREA_ACCOUNT||required|XREAのアカウントID
+XREA_SERVER_NAME||required|XREAのサーバ名
+XREA_API_SECRET_KEY||required|XREAのAPIシークレットキー
+PROTON_PASS_PERSONAL_ACCESS_TOKEN||required|Proton Passの読み取り専用アクセストークン
+PROTON_PASS_VAULT_NAME||required|照合に使うVault名
+TUNNEL_TOKEN||optional|Cloudflare Tunnelのトークン（指定するとcloudflaredを導入する）
+BIND_ADDRESS|127.0.0.1|optional|待ち受けるアドレス
+PORT|3000|optional|待ち受けるポート
+SESSION_DIR|/var/lib/xrea-address-generator/session|optional|Proton Passのセッション保存先
+LOG_LEVEL|info|optional|ログの詳細度

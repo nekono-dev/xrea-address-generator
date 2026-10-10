@@ -1,0 +1,95 @@
+# 公式ドキュメントの誤記を訂正する補正定義（生成した宣言に対する JSON Merge Patch、RFC 7386）。
+# null はキーの削除を表す。各項目は実際のAPIで確認した挙動に合わせている。
+paths:
+  /v1/mail/list:
+    post:
+      x-form-style: indexed
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  result:
+                    # 応答は配列ではなく、番号（"1" から始まる文字列）をキーとするオブジェクト
+                    $ref: null
+                    type: object
+                    additionalProperties:
+                      $ref: "#/components/schemas/v1_mail_list_response_result"
+  /v1/mail/edit:
+    post:
+      # 項目名は param[0][address_name] の形でのみ受理される
+      x-form-style: indexed
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              required: [account, api_secret_key, param, reset_flg, server_name]
+              properties:
+                reset_flg:
+                  # 1 は送信した値以外をすべて削除するため、0 以外を送信できない型にする
+                  enum: [0]
+                box_reset_flg:
+                  enum: [0]
+                param:
+                  $ref: null
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/v1_mail_edit_param"
+  /v1/mail/delete:
+    post:
+      # 削除対象の番号は param[no][0] の形で指定する
+      x-form-style: indexed
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              required: [account, api_secret_key, param, server_name]
+components:
+  schemas:
+    v1_mail_delete_param:
+      required: [no]
+      properties:
+        no:
+          examples: null
+          items:
+            type: integer
+    v1_mail_edit_param:
+      properties:
+        pop_how:
+          # 説明文と表で意味が食い違うため、実アカウントの値と転送先の有無から確定した意味に固定する
+          enum: [1, 2, 3, 4]
+          examples: null
+          description: 受信方法（1 転送のみ、2 受信のみ、3 転送と受信の両方、4 破棄）
+        quota:
+          # ドキュメントは 1 以上とするが、転送のみのアドレスは 0 を受理する
+          examples: null
+          minimum: 0
+    v1_mail_list_response_result:
+      required: [address, address_domain, address_name, address_trans, no, pop_how, quota]
+      properties:
+        # 実際の応答に含まれるが、ドキュメントに記載のない項目
+        no:
+          type: integer
+        address:
+          type: string
+        pop_how:
+          enum: [1, 2, 3, 4]
+          examples: null
+          description: 受信方法（1 転送のみ、2 受信のみ、3 転送と受信の両方、4 破棄）
+        # 数値を文字列で返す項目
+        quota:
+          type: string
+          examples: null
+        quota_use_byte:
+          type: [string, integer]
+          examples: null
+        quota_use_per:
+          type: [string, integer]
+          examples: null
+        mail_num:
+          type: [string, integer]
+          examples: null
+        # フィルターが無いときは空文字列を返す
+        customd_body:
+          type: [string, array]
