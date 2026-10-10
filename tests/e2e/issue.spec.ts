@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import { mockApi } from "./mock"
+import { alias, mockApi } from "./mock"
 
 async function open(page: Page, width = 900) {
   await page.setViewportSize({ width, height: 700 })
@@ -57,6 +57,22 @@ test.describe("発行フォームと部品", () => {
     const { doc, vw } = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, vw: window.innerWidth }))
     expect(doc).toBeLessThanOrEqual(vw)
   })
+
+  for (const width of [360, 390, 430]) {
+    test(`web-ui/AC-14: 幅${width}ピクセルで長いドメインを含む一覧を初回表示しても、閉じた候補リストを含めて横幅が表示幅を超えない`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 })
+      await mockApi(page, { aliases: [alias("booth.long.name@mail.unnamed.works", ["accounts.booth.pm"], "very.long.forward.address@unnamed.works"), alias("a@example.com")] })
+      await page.goto("/")
+      await page.waitForSelector(".row")
+      const r = await page.evaluate(() => ({
+        doc: document.documentElement.scrollWidth,
+        vw: window.innerWidth,
+        over: [...document.querySelectorAll("*")].filter(e => e.getBoundingClientRect().right > window.innerWidth + 0.5).map(e => `${e.tagName}.${e.className}`),
+      }))
+      expect(r.over).toEqual([])
+      expect(r.doc).toBeLessThanOrEqual(r.vw)
+    })
+  }
 
   test("web-ui/AC-1: ページを下へ600ピクセルスクロールした後も、発行フォームの上端が画面の上端に位置する", async ({ page }) => {
     await open(page)
