@@ -16,7 +16,7 @@ test.describe("幅ごとの寸法と文字の大きさ", () => {
     const sizes = async () =>
       page.evaluate(() => ({
         body: getComputedStyle(document.body).fontSize,
-        row: getComputedStyle(document.querySelector(".row .ad")!).fontSize,
+        row: getComputedStyle(document.querySelector(".row .addr")!).fontSize,
         ghost: getComputedStyle(document.querySelector(".row [data-copy]")!).fontSize,
         chip: getComputedStyle(document.querySelector(".chip")!).fontSize,
       }))

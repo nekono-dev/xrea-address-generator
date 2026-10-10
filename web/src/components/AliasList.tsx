@@ -75,7 +75,7 @@ function Row({ alias, loading, flash, store }: { alias: Alias; loading: boolean;
   return (
     <div class={`row${flash ? " flash" : ""}`} ref={ref} data-address={alias.address}>
       <div class="a">
-        <div class="ad">{alias.address}</div>
+        <div class="addr">{alias.address}</div>
         {editing ? <ForwardEdit alias={alias} store={store} onDone={() => setEditing(false)} /> : <small class="fwd">→ {alias.forwardTo}</small>}
         {loading ? (
           <div class="chips" aria-label="照合中">

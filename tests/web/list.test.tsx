@@ -10,7 +10,7 @@ afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
 })
-const addresses = (c: Element) => [...c.querySelectorAll(".row .ad")].map(e => e.textContent)
+const addresses = (c: Element) => [...c.querySelectorAll(".row .addr")].map(e => e.textContent)
 
 async function mount(init?: Parameters<typeof fakeServer>[0]) {
   const server = fakeServer(init)
@@ -38,7 +38,7 @@ describe("一覧の表示・絞り込み・並び替え", () => {
   test("web-ui/AC-7: 行にアドレスと転送先とエントリ名が表示され、照合の取得中は読み込み表示が出る", async () => {
     const { r } = await mount()
     const sns = r.container.querySelector('[data-address="sns@example.net"]')!
-    expect(sns.querySelector(".ad")!.textContent).toBe("sns@example.net")
+    expect(sns.querySelector(".addr")!.textContent).toBe("sns@example.net")
     expect(sns.querySelector("small")!.textContent).toBe("→ me@mail.example")
     expect([...sns.querySelectorAll(".chip")].map(c => c.textContent)).toEqual(["Bluesky", "X (Twitter)"])
     expect(r.container.querySelector('[data-address="bank@example.org"] .chips')).toBeNull() // エントリが無い行は省く

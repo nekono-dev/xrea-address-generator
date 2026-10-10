@@ -47,7 +47,7 @@ test.describe("選択した値の保存と復元", () => {
     await page.getByRole("button", { name: "Z→A" }).click()
     await page.reload()
     await open(page)
-    await expect(page.locator(".row .ad")).toHaveText(["b@example.com", "a@example.com"])
+    await expect(page.locator(".row .addr")).toHaveText(["b@example.com", "a@example.com"])
     await expect(page.locator("#filter .dd-btn")).toContainText("example.com")
     await expect(page.getByRole("button", { name: "Z→A" })).toHaveAttribute("aria-pressed", "true")
   })

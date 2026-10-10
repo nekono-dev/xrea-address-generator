@@ -347,7 +347,8 @@ h1 {
   flex: 1;
   min-width: 0;
 }
-.row .ad {
+/* 広告ブロッカーが .ad を非表示にするため、別の名前にする */
+.row .addr {
   overflow: hidden;
   text-overflow: ellipsis;
   word-break: break-all;

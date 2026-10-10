@@ -5,7 +5,7 @@ test.describe("一覧と行の操作", () => {
   test("web-ui/AC-6: ドメインで絞り込み、降順に切り替えると、行が絞られ並びが逆になる", async ({ page }) => {
     await mockApi(page, { aliases: [alias("b@example.com"), alias("a@example.com"), alias("c@example.net")] })
     await page.goto("/")
-    const rows = page.locator(".row .ad")
+    const rows = page.locator(".row .addr")
     await expect(rows).toHaveText(["a@example.com", "b@example.com", "c@example.net"])
     await page.locator("#filter .dd-btn").click()
     await page.locator("#filter [role=option]", { hasText: "example.com" }).click()
