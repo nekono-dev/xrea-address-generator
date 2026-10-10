@@ -1,6 +1,6 @@
 // テスト用の偽のXREAとProton Pass。
 import type { AddressMap, ProtonReader, Status } from "../../src/proton/index"
-import type { CreateMailInput } from "../../src/xrea/client"
+import type { CreateMailInput, ForwardCheck } from "../../src/xrea/client"
 import type { MailEntry } from "../../src/xrea/errors"
 import type { XreaPort } from "../../src/server/aliasService"
 
@@ -11,6 +11,7 @@ export class FakeXrea implements XreaPort {
   calls: string[] = []
   created: CreateMailInput[] = []
   deleted: number[][] = []
+  changed: { no: number; forwardTo: string }[] = []
   delayMs = 0
   log: { op: string; start: number; end: number }[] = []
 
@@ -34,6 +35,17 @@ export class FakeXrea implements XreaPort {
       this.created.push(input)
       const no = Math.max(0, ...this.mails.map(m => m.no)) + 1
       this.mails.push(mail(no, input.name, input.domain, 1, input.forwardTo))
+    })
+  }
+
+  // 実物と同じく、一覧の取り直しと編集の2回の呼び出しで構成する
+  async mailChangeForward(address: string, forwardTo: string, check: ForwardCheck): Promise<void> {
+    const mails = await this.mailList()
+    const m = mails.find(x => `${x.address_name}@${x.address_domain}`.toLowerCase() === address.toLowerCase())
+    check(m)
+    await this.step("change", () => {
+      this.changed.push({ no: m.no, forwardTo })
+      this.mails = this.mails.map(x => (x.no === m.no ? { ...x, address_trans: forwardTo } : x))
     })
   }
 

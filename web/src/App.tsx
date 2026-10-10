@@ -1,6 +1,8 @@
 // 画面全体の組み立て。一覧と候補の読み込み、照合状態の確認の繰り返し。
 import { useEffect, useRef } from "preact/hooks"
 import { api } from "./api"
+import { loadPrefs } from "./prefs"
+import { OfflineBanner } from "./pwa"
 import { AliasList } from "./components/AliasList"
 import { Banner } from "./components/Banner"
 import { IssueForm } from "./components/IssueForm"
@@ -16,7 +18,9 @@ export function App({ store = defaultStore, pollMs = POLL_MS }: { store?: Store;
   async function reloadList() {
     try {
       const r = await api.list()
-      store.set({ aliases: r.aliases, listLoaded: true, listError: null })
+      // 保存した絞り込みのドメインが一覧に無ければ、全件の表示にする
+      const { filter } = store.get()
+      store.set({ aliases: r.aliases, listLoaded: true, listError: null, filter: filter && r.aliases.some(a => a.domain === filter) ? filter : null })
       return r
     } catch (e) {
       store.set({ listLoaded: true, listError: (e as Error).message })
@@ -75,6 +79,8 @@ export function App({ store = defaultStore, pollMs = POLL_MS }: { store?: Store;
   }
 
   useEffect(() => {
+    const p = loadPrefs()
+    store.set({ filter: p.filter ?? null, order: p.order ?? "asc" })
     void load()
     return () => {
       if (timer.current) clearTimeout(timer.current)
@@ -89,6 +95,7 @@ export function App({ store = defaultStore, pollMs = POLL_MS }: { store?: Store;
       <div class="sticky" id="sticky">
         <div class="wrap">
           <IssueForm store={store} />
+          <OfflineBanner onOnline={() => void load()} />
           {proton?.state === "relogin" && <Banner kind="relogin" text="Proton Pass のセッションが失効したため、再ログインしています…" />}
           {proton?.state === "error" && <Banner kind="error" text={`Proton Passの照合に失敗しました: ${proton.error?.message ?? ""}`} />}
         </div>

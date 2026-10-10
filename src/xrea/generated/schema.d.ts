@@ -102,13 +102,17 @@ export interface components {
              */
             customd: 0 | 1;
             /** @description カスタムフィルター内容 ※下記に別途項目記載 */
-            customd_body?: components["schemas"]["v1_mail_edit_param_customd_body"][];
+            customd_body?: string | components["schemas"]["v1_mail_edit_param_customd_body"][] | {
+                [key: string]: components["schemas"]["v1_mail_edit_param_customd_body"];
+            };
             /**
              * @description ドメインが当サーバに向いているか確認の有無(A/MX)
              * @default 0
              * @enum {integer}
              */
             force?: 0 | 1;
+            /** @description 編集するアドレスの番号（一覧の no） */
+            no?: number;
             /**
              * @description 受信方法（1 転送のみ、2 受信のみ、3 転送と受信の両方、4 破棄）
              * @enum {integer}
@@ -150,7 +154,12 @@ export interface components {
              * @enum {integer}
              */
             allow_stringcase?: 0 | 1;
-            conditions?: components["schemas"]["v1_mail_edit_param_customd_body_conditions"];
+            body_match?: number;
+            conditions?: components["schemas"]["v1_mail_edit_param_customd_body_conditions"][] | {
+                [key: string]: components["schemas"]["v1_mail_edit_param_customd_body_conditions"];
+            };
+            header_match?: number;
+            no?: number;
             /**
              * @description メールを残すか
              * @default 0
@@ -165,7 +174,7 @@ export interface components {
              */
             body?: string;
             /**
-             * @description match：を含む notmatch：を含まない byte_below：バイト以下 byte_above：バイト以上
+             * @description match：を含む notmatch：を含まない byte_below：バイト以下 byte_above：バイト以上 none：指定無し(japaneseやnotjapanese等)
              * @example xxxxxx
              */
             condition?: string;
@@ -213,7 +222,9 @@ export interface components {
              */
             customd?: 0 | 1;
             /** @description カスタムフィルター内容 ※下記に別途項目記載 */
-            customd_body?: string | components["schemas"]["v1_mail_list_response_result_customd_body"][];
+            customd_body?: string | {
+                [key: string]: components["schemas"]["v1_mail_list_response_result_customd_body"];
+            };
             /** @description メール数 */
             mail_num?: string | number;
             no: number;
@@ -256,7 +267,10 @@ export interface components {
              * @enum {integer}
              */
             allow_stringcase?: 0 | 1;
-            conditions?: components["schemas"]["v1_mail_list_response_result_customd_body_conditions"];
+            body_match?: number;
+            conditions?: components["schemas"]["v1_mail_list_response_result_customd_body_conditions"][];
+            header_match?: number;
+            no?: number;
             /**
              * @description メールを残すか
              * @default 0

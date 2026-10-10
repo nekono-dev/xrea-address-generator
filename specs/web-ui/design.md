@@ -2,61 +2,47 @@
 
 ## 1. 構成
 
-| パス                               | 責務                                             |
-| ---------------------------------- | ------------------------------------------------ |
-| `web/index.html`                   | 画面の入口                                       |
-| `web/src/main.tsx`                 | 起動と描画                                       |
-| `web/src/App.tsx`                  | 画面全体の組み立て                               |
-| `web/src/api.ts`                   | サーバとの通信と型                               |
-| `web/src/store.ts`                 | 状態の保持（一覧、候補、絞り込み、並び順、通知） |
-| `web/src/components/Dropdown.tsx`  | 独自のドロップダウン                             |
-| `web/src/components/Combobox.tsx`  | 自由入力つきの候補選択                           |
-| `web/src/components/Segmented.tsx` | 排他選択のボタン群                               |
-| `web/src/components/Toast.tsx`     | 通知                                             |
-| `web/src/components/Banner.tsx`    | 再ログインの帯                                   |
-| `web/src/components/IssueForm.tsx` | 発行フォーム                                     |
-| `web/src/components/AliasList.tsx` | 一覧と行の操作                                   |
-| `web/src/styles.css`               | 寸法・配色の定義と全部品のスタイル               |
-| `tests/web/components.test.tsx`    | 部品の単体テスト                                 |
-| `tests/e2e/issue.spec.ts`          | 発行の操作のブラウザテスト                       |
-| `tests/e2e/list.spec.ts`           | 一覧の操作のブラウザテスト                       |
-| `tests/e2e/proton.spec.ts`         | 照合状態の通知のブラウザテスト                   |
+| パス                                 | 責務                                             |
+| ------------------------------------ | ------------------------------------------------ |
+| `web/index.html`                     | 画面の入口                                       |
+| `web/src/main.tsx`                   | 起動と描画                                       |
+| `web/src/App.tsx`                    | 画面全体の組み立て                               |
+| `web/src/api.ts`                     | サーバとの通信と型                               |
+| `web/src/store.ts`                   | 状態の保持（一覧、候補、絞り込み、並び順、通知） |
+| `web/src/prefs.ts`                   | 選択した値のブラウザへの保存と復元               |
+| `web/src/components/Dropdown.tsx`    | 独自のドロップダウン                             |
+| `web/src/components/Combobox.tsx`    | 自由入力つきの候補選択                           |
+| `web/src/components/Segmented.tsx`   | 排他選択のボタン群                               |
+| `web/src/components/Toast.tsx`       | 通知                                             |
+| `web/src/components/Banner.tsx`      | 再ログインの帯                                   |
+| `web/src/components/IssueForm.tsx`   | 発行フォーム                                     |
+| `web/src/components/AliasList.tsx`   | 一覧と行の操作                                   |
+| `web/src/components/ForwardEdit.tsx` | 行内の転送先の変更                               |
+| `web/src/styles.css`                 | 寸法・配色の定義と全部品のスタイル               |
+| `tests/web/components.test.tsx`      | 部品の単体テスト                                 |
+| `tests/web/prefs.test.ts`            | 保存と復元の単体テスト                           |
+| `tests/e2e/issue.spec.ts`            | 発行の操作のブラウザテスト                       |
+| `tests/e2e/list.spec.ts`             | 一覧の操作のブラウザテスト                       |
+| `tests/e2e/mobile.spec.ts`           | 幅ごとの寸法・文字の大きさのブラウザテスト       |
+| `tests/e2e/prefs.spec.ts`            | 保存した値の復元のブラウザテスト                 |
+| `tests/e2e/proton.spec.ts`           | 照合状態の通知のブラウザテスト                   |
 
 ## 2. 設計項目
 
 ### D-1: 通信と型 (FR-4, FR-11)
 
 ```ts
-export type Alias = {
-  address: string
-  name: string
-  domain: string
-  forwardTo: string
-  protonEntries: string[]
-}
-export type ProtonStatus = {
-  state: "loading" | "ready" | "relogin" | "error"
-  updatedAt: string | null
-  reloginAt: string | null
-  itemCount: number | null
-  error: { kind: string; message: string } | null
-}
-export type ApiError = { error: { code: string; message: string } }
-
+// 型（Alias・ProtonStatus・Options）はサーバの応答と同じ形で定義する
+const enc = encodeURIComponent
 export const api = {
-  list: (): Promise<{ aliases: Alias[]; proton: ProtonStatus }> =>
-    get("/api/aliases"),
-  options: (): Promise<{ domains: string[]; forwardTargets: string[] }> =>
-    get("/api/options"),
-  create: (b: {
-    name?: string
-    domain: string
-    forwardTo: string
-  }): Promise<{ alias: Alias }> => post("/api/aliases", b),
-  remove: (address: string): Promise<void> =>
-    del(`/api/aliases/${encodeURIComponent(address)}`),
-  protonStatus: (): Promise<ProtonStatus> => get("/api/proton/status"),
-  protonRefresh: (): Promise<void> => post("/api/proton/refresh", {}),
+  list: () => get<ListResponse>("/api/aliases"),
+  options: () => get<Options>("/api/options"),
+  create: (b: CreateBody) => post<{ alias: Alias }>("/api/aliases", b),
+  changeForward: (address: string, forwardTo: string) =>
+    patch<{ alias: Alias }>(`/api/aliases/${enc(address)}`, { forwardTo }),
+  remove: (address: string) => del(`/api/aliases/${enc(address)}`),
+  protonStatus: () => get<ProtonStatus>("/api/proton/status"),
+  protonRefresh: () => post<void>("/api/proton/refresh", {}),
 }
 ```
 
@@ -66,45 +52,25 @@ export const api = {
 | 4xx・5xx で ApiError の本文 | message を持つ例外を送出し、呼び出し側が通知として表示する |
 | 通信の失敗                  | 「サーバへ接続できません」を通知する                       |
 
-### D-2: 発行フォームの固定表示と寸法 (FR-1, NFR-1, NFR-2, NFR-4)
+### D-2: 固定表示・寸法・文字の大きさ (FR-1, NFR-1, NFR-2, NFR-4, NFR-5, NFR-6)
+
+| 変数    | 幅680ピクセル以上 | 幅680ピクセル未満 | 用途                               |
+| ------- | ----------------- | ----------------- | ---------------------------------- |
+| --h     | 38px              | 44px              | 入力欄・ボタン・選択の高さ         |
+| --fs    | 15px              | 18px              | 本文・入力欄                       |
+| --fs-m  | 14px              | 17px              | 通知・空の一覧の文言               |
+| --fs-s  | 13px              | 16px              | 見出し・帯・行の操作ボタン・ラベル |
+| --fs-xs | 12px              | 14px              | 照合状態・エントリ名・並び替え     |
 
 ```css
-:root {
-  --h: 38px;
-  --r: 10px;
-  --bg: #0f172a;
-  --ctl: #1e293b;
-  --line: #334155;
-  --acc: #38bdf8;
-}
-.sticky {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  justify-self: stretch;
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
-}
-.sticky .wrap {
-  padding-top: 10px;
-  padding-bottom: 14px;
-}
-.dd-menu {
-  position: absolute;
-  z-index: 10;
-}
-.fld,
-.btn,
-.dd-btn {
-  height: var(--h);
-  box-sizing: border-box;
-}
-.wrap {
-  width: min(680px, 100%);
-  padding: 0 16px;
-  margin: 0 auto;
-}
-@media (max-width: 520px) {
+@media (max-width: 679.98px) {
+  :root {
+    --h: 44px;
+    --fs: 18px;
+    --fs-m: 17px;
+    --fs-s: 16px;
+    --fs-xs: 14px;
+  }
   .line {
     flex-wrap: wrap;
   }
@@ -112,15 +78,23 @@ export const api = {
     flex: 1 0 100%;
   }
 }
+/* iOS のフォーカス時の拡大を防ぐ */
+@media (pointer: coarse) {
+  input {
+    font-size: max(16px, var(--fs));
+  }
+}
 ```
 
-| 方針               | 内容                                                                                         |
-| ------------------ | -------------------------------------------------------------------------------------------- |
-| 固定表示           | 全幅の帯（sticky）の中に、中央寄せの内容領域を置く。帯自身が背景を持つため、背景の拡張が不要 |
-| 見切れの防止       | 候補リストを含む固定領域の祖先に、overflow の制限・clip-path・contain を指定しない           |
-| 重なり順           | 固定領域を一覧より前面に置き、候補リストは固定領域の内側の重なり順で前面に出す               |
-| 横スクロールの防止 | 文書の幅を広げる指定（負の余白・100vw の拡張）を使わない                                     |
-| 高さ               | 入力欄・ボタン・選択の高さは、変数 --h の1か所で定義する                                     |
+| 方針               | 内容                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| 固定表示           | 全幅の帯（sticky）の中に中央寄せの内容領域を置き、帯自身が背景を持つ                  |
+| 見切れの防止       | 候補リストを含む固定領域の祖先に、overflow の制限・clip-path・contain を指定しない    |
+| 重なり順           | 固定領域を一覧より前面に置き、候補リストは固定領域の内側の重なり順で前面に出す        |
+| 横スクロールの防止 | 文書の幅を広げる指定（負の余白・100vw の拡張）を使わない                              |
+| 高さと文字         | 高さと文字の大きさは変数で1か所に定義し、各部品は変数だけを参照する                   |
+| 拡大の防止         | 表示の拡大縮小の禁止（maximum-scale）は使わず、入力欄の文字を16ピクセル以上にする     |
+| 行の操作ボタン     | 幅680ピクセル未満では、アドレスを全幅で表示するため操作ボタンをアドレスの下の行へ回す |
 
 ### D-3: 独自の選択部品 (FR-4, FR-12)
 
@@ -148,8 +122,15 @@ type DropdownProps = {
 ```tsx
 const MAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 // input[role=combobox] と候補の ul[role=listbox] で構成する
+type Props = {
+  value: string
+  onInput: (v: string) => void
+  candidates: string[]
+  onEnter: () => void
+  onEscape?: () => void
+  label: string
+}
 const invalid = value.trim() !== "" && !MAIL_RE.test(value.trim())
-const canIssue = value.trim() !== "" && !invalid
 ```
 
 | 操作                       | 動作                                                   |
@@ -157,6 +138,7 @@ const canIssue = value.trim() !== "" && !invalid
 | フォーカスまたは右端の矢印 | 候補を開く                                             |
 | 文字の入力                 | 候補を部分一致で絞り込み、入力値をそのまま保持する     |
 | 候補の選択                 | 入力欄へ値を設定して閉じる                             |
+| 候補が閉じた状態の Escape  | onEscape を呼ぶ                                        |
 | 形式不正                   | 枠を赤くして誤りの文言を表示し、発行ボタンを無効にする |
 
 ### D-5: 発行の操作 (FR-2, FR-3, NFR-3)
@@ -174,7 +156,7 @@ async function issue() {
   toast(`${alias.address} を発行しました`)
 }
 onKeyDown = (e) => {
-  if (e.key === "Enter" && !e.isComposing) issue()
+  if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) issue()
 }
 ```
 
@@ -209,17 +191,9 @@ export function view(
 | 行           | アドレス、転送先、エントリ名（複数は並べて表示）。エントリが無い行は表示を省く |
 | 照合の取得中 | エントリ名の位置に読み込み表示を出す                                           |
 
-### D-7: コピーと削除の操作 (FR-8, FR-9)
+### D-7: コピーと削除の操作 (FR-8)
 
 ```ts
-async function copy(a: Alias) {
-  try {
-    await navigator.clipboard.writeText(a.address)
-    toast("コピーしました")
-  } catch {
-    toast("コピーできませんでした")
-  }
-}
 function confirmText(a: Alias): string {
   return a.protonEntries.length
     ? `Proton Passに「${a.protonEntries.join("」「")}」があります。メールを削除しますか？`
@@ -227,29 +201,25 @@ function confirmText(a: Alias): string {
 }
 ```
 
-| 操作             | 動作                                                 |
-| ---------------- | ---------------------------------------------------- |
-| 削除ボタンの押下 | 行の操作部が、確認文と「削除」「やめる」に切り替わる |
-| 「削除」         | 削除を要求し、成功したら行を取り除き、通知する       |
-| 「やめる」       | 確認を閉じ、何も要求しない                           |
+| 操作             | 動作                                                           |
+| ---------------- | -------------------------------------------------------------- |
+| コピーボタン     | クリップボードへ書き込み、成功と失敗のそれぞれを通知する       |
+| 削除ボタンの押下 | 行の操作部が、確認文と「削除」「やめる」に切り替わる           |
+| 「削除」         | 削除を要求し、成功したら行を取り除き、通知する                 |
+| 「やめる」       | 確認を閉じ、何も要求しない。確認の表示時はここへフォーカスする |
 
 ### D-8: 照合状態とバナー (FR-10)
 
 ```ts
-// 照合が loading・relogin の間は5秒間隔で状態を確認する
-// 再ログインの通知は reloginAt の変化で判定し、5秒間隔の間に完了した再ログインも見逃さない
+// 照合が loading・relogin の間は5秒間隔で状態を確認する。初回表示（prev が null）では過去の再ログインを通知しない
 async function pollProton() {
-  const prev = store.proton // 初回表示（prev が null）では、過去の再ログインを通知しない
+  const prev = store.proton
   const s = await api.protonStatus()
   store.setProton(s)
-  if (
-    prev &&
-    s.state === "ready" &&
-    s.reloginAt &&
-    s.reloginAt !== prev.reloginAt
-  )
+  const relogged = s.reloginAt !== prev?.reloginAt
+  if (prev && s.state === "ready" && s.reloginAt && relogged)
     toast("Proton Pass に再ログインしました")
-  // 照合が完了したら一覧を取り直す（エントリ名は一覧の応答に含まれるため）
+  // エントリ名は一覧の応答に含まれるため、照合の完了時に一覧を取り直す
   if (prev && prev.state !== "ready" && s.state === "ready") await reloadList()
   if (s.state === "loading" || s.state === "relogin")
     setTimeout(pollProton, 5000)
@@ -263,6 +233,58 @@ async function pollProton() {
 | ready   | 「Proton照合: N件を参照・HH:MM 更新」と、更新ボタン           |
 | error   | 帯で固定の文言を表示し、更新ボタンを残す                      |
 
+### D-9: 選択した値の保存と復元 (FR-4, FR-5, FR-6)
+
+```ts
+const KEY = "xrea-address-generator:prefs"
+type Filter = string | null
+export type Prefs = {
+  domain?: string
+  forwardTo?: string
+  filter?: Filter
+  order?: SortOrder
+}
+// 読めなければ {} を返す
+export function loadPrefs(storage?: Storage): Prefs
+// 既存の値へ併合して書く。書けなければ何もしない
+export function savePrefs(patch: Prefs, storage?: Storage): void
+```
+
+| 値        | 保存の契機                         | 復元の規則                                               |
+| --------- | ---------------------------------- | -------------------------------------------------------- |
+| domain    | 発行フォームでドメインを選んだとき | 候補にあれば初期値にし、無ければ先頭の候補にする         |
+| forwardTo | 入力値がメール形式になったとき     | 候補の有無によらず初期値にする。無ければ先頭の候補にする |
+| filter    | 絞り込みを選んだとき               | 一覧の取得後、一覧のドメインに無ければ全件にする         |
+| order     | 並び順を選んだとき                 | asc・desc 以外の値は asc にする                          |
+
+保存先が使えない（例外・不正なJSON）ときは、保存せずに既定の動作を続ける。
+
+### D-10: 行内の転送先の変更 (FR-9)
+
+```tsx
+type Props = { alias: Alias; candidates: string[]; onDone: () => void }
+function ForwardEdit({ alias, candidates, onDone }: Props) {
+  const [v, setV] = useState(alias.forwardTo)
+  const ok = MAIL_RE.test(v.trim()) && !busy
+  async function save() {
+    if (!ok) return
+    const { alias: next } = await api.changeForward(alias.address, v.trim())
+    store.add(next) // 同じアドレスの行を置き換える
+    toast("転送先を変更しました")
+    onDone()
+  }
+  // Combobox（onEnter=save, onEscape=onDone）と「保存」「やめる」のボタンを並べる
+}
+```
+
+| 操作           | 動作                                                                                           |
+| -------------- | ---------------------------------------------------------------------------------------------- |
+| 変更ボタン     | 転送先の位置に、現在の転送先を入れた入力部品を開いてフォーカスする。候補はこの時点では開かない |
+| 保存・Enter    | 変更を要求し、成功したら行の転送先を置き換えて閉じる                                           |
+| やめる・Escape | 要求を送らずに閉じる                                                                           |
+| 形式不正       | 枠を赤くし、保存ボタンを無効にする                                                             |
+| 変更の失敗     | 入力を保持し、サーバのメッセージを通知する                                                     |
+
 ## 3. エラー処理
 
 | 事象                             | 処理                                                       |
@@ -270,5 +292,5 @@ async function pollProton() {
 | 一覧の取得に失敗                 | 一覧の位置に失敗の表示と再読み込みのボタンを出す           |
 | 候補の取得に失敗                 | ドメインを選べないため発行ボタンを無効にし、理由を通知する |
 | クリップボードへの書き込みの失敗 | 「コピーできませんでした」を通知する                       |
-| 発行・削除がエラー応答           | サーバのメッセージを通知し、画面の状態は変更しない         |
+| 発行・変更・削除がエラー応答     | サーバのメッセージを通知し、画面の状態は変更しない         |
 | 通信の失敗                       | 「サーバへ接続できません」を通知する                       |

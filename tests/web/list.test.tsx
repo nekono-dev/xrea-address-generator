@@ -94,3 +94,79 @@ describe("コピーと削除", () => {
     await waitFor(() => expect(r.container.querySelectorAll(".row")).toHaveLength(3))
   })
 })
+
+describe("転送先の変更", () => {
+  const row = (c: Element, address: string) => c.querySelector(`[data-address="${address}"]`)!
+  const patches = (s: ReturnType<typeof fakeServer>) => s.requests.filter(q => q.method === "PATCH")
+
+  test("web-ui/AC-17: 行の変更ボタンで入力部品が開き、候補を選んで確定すると変更の要求が送信されて行の転送先が切り替わる", async () => {
+    const { r, server } = await mount()
+    fireEvent.click(row(r.container, "shop@example.com").querySelector("[data-edit]")!)
+    const input = r.getByRole("combobox", { name: "shop@example.com の転送先" }) as HTMLInputElement
+    expect(input.value).toBe("me@mail.example")
+    await waitFor(() => expect(document.activeElement).toBe(input))
+    fireEvent.focus(input)
+    const option = [...row(r.container, "shop@example.com").querySelectorAll("[role=option]")].find(o => o.textContent === "sub@mail.example")!
+    fireEvent.mouseDown(option)
+    expect(input.value).toBe("sub@mail.example")
+    fireEvent.click(row(r.container, "shop@example.com").querySelector("[data-save]")!)
+    await waitFor(() => expect(row(r.container, "shop@example.com").querySelector(".fwd")?.textContent).toBe("→ sub@mail.example"))
+    expect(patches(server)).toEqual([{ method: "PATCH", url: "/api/aliases/shop%40example.com", body: { forwardTo: "sub@mail.example" } }])
+    expect(r.getByRole("status").textContent).toContain("転送先を変更しました")
+    // Enter でも確定できる
+    fireEvent.click(row(r.container, "bank@example.org").querySelector("[data-edit]")!)
+    const input2 = r.getByRole("combobox", { name: "bank@example.org の転送先" })
+    fireEvent.input(input2, { target: { value: "new@mail.example" } })
+    fireEvent.keyDown(input2, { key: "Enter" })
+    await waitFor(() => expect(row(r.container, "bank@example.org").querySelector(".fwd")?.textContent).toBe("→ new@mail.example"))
+  })
+
+  test("web-ui/AC-18: 行内の入力部品で形式不正の転送先を入力すると確定が無効になり、やめるで要求を送らずに閉じる", async () => {
+    const { r, server } = await mount()
+    fireEvent.click(row(r.container, "shop@example.com").querySelector("[data-edit]")!)
+    const input = r.getByRole("combobox", { name: "shop@example.com の転送先" })
+    fireEvent.input(input, { target: { value: "not-mail" } })
+    expect(input.getAttribute("aria-invalid")).toBe("true")
+    expect((row(r.container, "shop@example.com").querySelector("[data-save]") as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.keyDown(input, { key: "Enter" })
+    fireEvent.click(row(r.container, "shop@example.com").querySelector("[data-cancel]")!)
+    expect(row(r.container, "shop@example.com").querySelector("[role=combobox]")).toBeNull()
+    expect(row(r.container, "shop@example.com").querySelector(".fwd")?.textContent).toBe("→ me@mail.example")
+    // 候補が閉じた状態の Escape でも閉じる
+    fireEvent.click(row(r.container, "shop@example.com").querySelector("[data-edit]")!)
+    const again = r.getByRole("combobox", { name: "shop@example.com の転送先" })
+    fireEvent.keyDown(again, { key: "Escape" }) // 候補を閉じる
+    fireEvent.keyDown(again, { key: "Escape" }) // 編集を閉じる
+    expect(row(r.container, "shop@example.com").querySelector("[role=combobox]")).toBeNull()
+    expect(patches(server)).toHaveLength(0)
+  })
+
+  test("変更がエラー応答のときは、サーバのメッセージを通知し、入力を保持する", async () => {
+    const { r, server } = await mount()
+    server.overrides["PATCH /api/aliases/:address"] = () => ({ status: 503, body: { error: { code: "rate_limited", message: "少し待ってから再度お試しください" } } })
+    fireEvent.click(row(r.container, "shop@example.com").querySelector("[data-edit]")!)
+    const input = r.getByRole("combobox", { name: "shop@example.com の転送先" }) as HTMLInputElement
+    fireEvent.input(input, { target: { value: "x@mail.example" } })
+    fireEvent.keyDown(input, { key: "Enter" })
+    await waitFor(() => expect(r.getByRole("status").textContent).toContain("少し待ってから"))
+    expect(input.value).toBe("x@mail.example")
+    expect(row(r.container, "shop@example.com").querySelector("[role=combobox]")).not.toBeNull()
+  })
+})
+
+describe("選択した値の復元", () => {
+  test("web-ui/AC-21: 選んだ絞り込みと並び順が、再読み込み後も同じ状態で表示される", async () => {
+    const first = await mount({ aliases: [alias("b@example.com"), alias("a@example.com"), alias("c@example.net")] })
+    fireEvent.click(first.r.getByRole("button", { name: "ドメインで絞り込み" }))
+    fireEvent.click([...first.r.container.querySelectorAll("#filter [role=option]")].find(o => o.textContent === "example.com")!)
+    fireEvent.click(first.r.getByRole("button", { name: "Z→A" }))
+    cleanup()
+    // 再読み込み（保存先は残したまま、画面と状態を作り直す）
+    const store = createStore()
+    const r = render(<App store={store} />)
+    await waitFor(() => expect(addresses(r.container)).toEqual(["b@example.com", "a@example.com"]))
+    expect(r.getByRole("button", { name: "ドメインで絞り込み" }).textContent).toContain("example.com")
+    expect(r.getByRole("button", { name: "Z→A" }).getAttribute("aria-pressed")).toBe("true")
+  })
+})
+

@@ -1,6 +1,11 @@
 /* 寸法・配色の定義と全部品のスタイル。ブラウザ標準の部品の見た目は使わない */
 :root {
+  /* 高さと文字の大きさ（4段階）。幅680ピクセル未満では末尾の指定で置き換える */
   --h: 38px;
+  --fs: 15px;
+  --fs-m: 14px;
+  --fs-s: 13px;
+  --fs-xs: 12px;
   --r: 10px;
   --bg: #0f172a;
   --fg: #e2e8f0;
@@ -20,7 +25,9 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
-  font-size: 15px;
+  font-size: var(--fs);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 #app {
   display: grid;
@@ -38,7 +45,7 @@ button {
   margin: 0 auto;
 }
 h1 {
-  font-size: 13px;
+  font-size: var(--fs-s);
   letter-spacing: 0.25em;
   color: var(--mut);
   margin: 0;
@@ -71,7 +78,7 @@ h1 {
 .label {
   align-self: center;
   color: var(--mut);
-  font-size: 13px;
+  font-size: var(--fs-s);
   white-space: nowrap;
 }
 .at {
@@ -126,7 +133,7 @@ h1 {
 }
 .err {
   color: var(--danger);
-  font-size: 12px;
+  font-size: var(--fs-xs);
   margin: 2px 4px 0;
   min-height: 0;
 }
@@ -234,11 +241,15 @@ h1 {
   border-radius: var(--r);
   background: #422006;
   color: #fde68a;
-  font-size: 13px;
+  font-size: var(--fs-s);
 }
 .banner.error {
   background: #450a0a;
   color: #fecaca;
+}
+.banner.offline {
+  background: #1e293b;
+  color: var(--fg);
 }
 .sp {
   width: 12px;
@@ -264,7 +275,7 @@ h1 {
   flex-wrap: wrap;
 }
 .tools h2 {
-  font-size: 12px;
+  font-size: var(--fs-xs);
   color: var(--mut);
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -273,8 +284,8 @@ h1 {
   white-space: nowrap;
 }
 .tools .dd-btn {
-  font-size: 13px;
-  height: 32px;
+  font-size: var(--fs-s);
+  height: calc(var(--h) - 6px);
 }
 .seg {
   display: inline-flex;
@@ -283,7 +294,7 @@ h1 {
   padding: 3px;
 }
 .seg button {
-  font-size: 12px;
+  font-size: var(--fs-xs);
   border: 0;
   background: none;
   color: var(--mut);
@@ -300,7 +311,7 @@ h1 {
   box-shadow: 0 0 0 2px var(--acc);
 }
 .pstat {
-  font-size: 12px;
+  font-size: var(--fs-xs);
   color: var(--mut);
   display: flex;
   align-items: center;
@@ -308,7 +319,7 @@ h1 {
   min-height: 24px;
 }
 .link {
-  font-size: 12px;
+  font-size: var(--fs-xs);
   background: none;
   border: 0;
   color: var(--acc);
@@ -353,7 +364,7 @@ h1 {
   margin-top: 5px;
 }
 .chip {
-  font-size: 12px;
+  font-size: var(--fs-xs);
   color: #c4b5fd;
   background: #2e1065;
   border-radius: 6px;
@@ -379,7 +390,7 @@ h1 {
   gap: 2px;
 }
 .ghost {
-  font-size: 13px;
+  font-size: var(--fs-s);
   background: none;
   border: 1px solid transparent;
   color: var(--mut);
@@ -411,13 +422,13 @@ h1 {
   justify-content: flex-end;
   max-width: 280px;
   color: var(--danger);
-  font-size: 13px;
+  font-size: var(--fs-s);
 }
 .empty {
   color: var(--mut);
   padding: 30px 0;
   text-align: center;
-  font-size: 14px;
+  font-size: var(--fs-m);
 }
 
 /* 通知 */
@@ -437,7 +448,7 @@ h1 {
   border-radius: 99px;
   background: var(--fg);
   color: var(--bg);
-  font-size: 14px;
+  font-size: var(--fs-m);
   text-align: center;
   animation: toast-in 0.2s ease-out;
 }
@@ -448,7 +459,37 @@ h1 {
   }
 }
 
-@media (max-width: 520px) {
+/* 行内の転送先の変更 */
+.fedit {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+.fedit-act {
+  display: flex;
+  gap: 6px;
+}
+.ghost.yes-acc {
+  color: #082f49;
+  background: var(--acc);
+}
+.ghost.yes-acc:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.ghost:disabled {
+  cursor: default;
+}
+
+/* スマートフォン向けの表示（幅680ピクセル未満）。文字は約1.2倍、部品の高さは44ピクセル */
+@media (max-width: 679.98px) {
+  :root {
+    --h: 44px;
+    --fs: 18px;
+    --fs-m: 17px;
+    --fs-s: 16px;
+    --fs-xs: 14px;
+  }
   .line {
     flex-wrap: wrap;
   }
@@ -457,5 +498,24 @@ h1 {
   }
   .fld.al {
     flex: 1 0 40%;
+  }
+  /* 行の操作ボタンはアドレスの下へ回し、アドレスを全幅で表示する */
+  .row {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+  .row .a {
+    flex: 1 0 100%;
+  }
+  .act {
+    margin-left: auto;
+  }
+}
+
+/* タッチ操作の端末では、iOS のフォーカス時の拡大を防ぐため入力欄の文字を16ピクセル以上にする */
+@media (pointer: coarse) {
+  input,
+  .fld {
+    font-size: max(16px, var(--fs));
   }
 }

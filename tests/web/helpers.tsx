@@ -11,6 +11,7 @@ type Handler = (req: { method: string; url: string; body: any }) => { status: nu
 
 /** 経路ごとの応答を差し替えられる偽のサーバ。要求は requests に記録する */
 export function fakeServer(init: { aliases?: Alias[]; proton?: ProtonStatus; domains?: string[]; forwardTargets?: string[] } = {}) {
+  globalThis.localStorage?.clear() // 前のテストで保存した選択を持ち越さない
   const state = {
     aliases: init.aliases ?? [alias("shop@example.com", ["Amazon.co.jp"]), alias("sns@example.net", ["Bluesky", "X (Twitter)"]), alias("bank@example.org")],
     proton: init.proton ?? ready(),
@@ -32,6 +33,13 @@ export function fakeServer(init: { aliases?: Alias[]; proton?: ProtonStatus; dom
         const a = alias(`${name}@${body.domain}`, [], body.forwardTo)
         state.aliases.push(a)
         return { status: 201, body: { alias: a } }
+      }
+      case "PATCH /api/aliases/:address": {
+        const address = decodeURIComponent(url.split("/").pop()!)
+        const a = state.aliases.find(x => x.address === address)
+        if (!a) return { status: 404, body: { error: { code: "not_found", message: `${address} は存在しません` } } }
+        a.forwardTo = body.forwardTo
+        return { status: 200, body: { alias: { ...a } } }
       }
       case "DELETE /api/aliases/:address": {
         const address = decodeURIComponent(url.split("/").pop()!)

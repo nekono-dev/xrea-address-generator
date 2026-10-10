@@ -32,6 +32,7 @@ const MIME: Record<string, string> = {
   ".png": "image/png",
   ".ico": "image/x-icon",
   ".json": "application/json",
+  ".webmanifest": "application/manifest+json",
   ".woff2": "font/woff2",
 }
 
@@ -97,6 +98,12 @@ export function createApp(opts: { service: AliasService; webDir?: string; logger
     return c.json({ alias }, 201)
   })
 
+  app.patch("/api/aliases/:address", async c => {
+    const b = await readJson(c)
+    const alias = await service.changeForward(c.req.param("address"), typeof b.forwardTo === "string" ? b.forwardTo : "")
+    return c.json({ alias })
+  })
+
   app.delete("/api/aliases/:address", async c => {
     await service.deleteAlias(c.req.param("address"))
     return c.body(null, 204)
@@ -112,13 +119,22 @@ export function createApp(opts: { service: AliasService; webDir?: string; logger
   app.all("/api/*", c => c.json({ error: { code: "not_found", message: "APIが見つかりません" } }, 404))
 
   // 画面ファイル。該当ファイルが無いパスは入口ファイルを返す
+  // 名前に版を含む /assets/ は1年間キャッシュさせ、それ以外（入口・宣言・Service Worker）は毎回検証させる
+  const assetsDir = path.join(webDir, "assets")
   app.get("*", c => {
     const rel = decodeURIComponent(c.req.path).replace(/^\/+/, "")
     const file = path.resolve(webDir, rel)
     const inside = file === webDir || file.startsWith(webDir + path.sep)
-    const target = inside && rel !== "" && fs.existsSync(file) && fs.statSync(file).isFile() ? file : path.join(webDir, "index.html")
+    const exists = inside && rel !== "" && fs.existsSync(file) && fs.statSync(file).isFile()
+    // 存在しない /assets/ に入口を返すと、端末に入口が画面ファイルとして保存されるため 404 にする
+    if (!exists && rel.startsWith("assets/")) return c.text("画面ファイルが見つかりません", 404, { "cache-control": "no-cache" })
+    const target = exists ? file : path.join(webDir, "index.html")
     if (!fs.existsSync(target)) return c.text("画面ファイルが見つかりません", 404)
-    return c.body(fs.readFileSync(target), 200, { "content-type": MIME[path.extname(target)] ?? "application/octet-stream" })
+    const immutable = target.startsWith(assetsDir + path.sep)
+    return c.body(fs.readFileSync(target), 200, {
+      "content-type": MIME[path.extname(target)] ?? "application/octet-stream",
+      "cache-control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
+    })
   })
 
   return app

@@ -56,16 +56,24 @@ components:
             - 1
           type: integer
         customd_body:
+          additionalProperties:
+            $ref: "#/components/schemas/v1_mail_edit_param_customd_body"
           description: カスタムフィルター内容 ※下記に別途項目記載
           items:
             $ref: "#/components/schemas/v1_mail_edit_param_customd_body"
-          type: array
+          type:
+            - string
+            - array
+            - object
         force:
           default: 0
           description: ドメインが当サーバに向いているか確認の有無(A/MX)
           enum:
             - 0
             - 1
+          type: integer
+        no:
+          description: 編集するアドレスの番号（一覧の no）
           type: integer
         pop_how:
           description: 受信方法（1 転送のみ、2 受信のみ、3 転送と受信の両方、4 破棄）
@@ -127,8 +135,20 @@ components:
             - 0
             - 1
           type: integer
+        body_match:
+          type: integer
         conditions:
-          $ref: "#/components/schemas/v1_mail_edit_param_customd_body_conditions"
+          additionalProperties:
+            $ref: "#/components/schemas/v1_mail_edit_param_customd_body_conditions"
+          items:
+            $ref: "#/components/schemas/v1_mail_edit_param_customd_body_conditions"
+          type:
+            - array
+            - object
+        header_match:
+          type: integer
+        no:
+          type: integer
         save_mail:
           default: 0
           description: メールを残すか
@@ -148,7 +168,7 @@ components:
             - xxxxxx
           type: string
         condition:
-          description: match：を含む notmatch：を含まない byte_below：バイト以下 byte_above：バイト以上
+          description: match：を含む notmatch：を含まない byte_below：バイト以下 byte_above：バイト以上 none：指定無し(japaneseやnotjapanese等)
           examples:
             - xxxxxx
           type: string
@@ -203,12 +223,12 @@ components:
             - 1
           type: integer
         customd_body:
-          description: カスタムフィルター内容 ※下記に別途項目記載
-          items:
+          additionalProperties:
             $ref: "#/components/schemas/v1_mail_list_response_result_customd_body"
+          description: カスタムフィルター内容 ※下記に別途項目記載
           type:
             - string
-            - array
+            - object
         mail_num:
           description: メール数
           type:
@@ -276,8 +296,16 @@ components:
             - 0
             - 1
           type: integer
+        body_match:
+          type: integer
         conditions:
-          $ref: "#/components/schemas/v1_mail_list_response_result_customd_body_conditions"
+          items:
+            $ref: "#/components/schemas/v1_mail_list_response_result_customd_body_conditions"
+          type: array
+        header_match:
+          type: integer
+        no:
+          type: integer
         save_mail:
           default: 0
           description: メールを残すか

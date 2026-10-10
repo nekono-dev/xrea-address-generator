@@ -60,6 +60,7 @@ export const api = {
   list: () => request<{ aliases: Alias[]; proton: ProtonStatus }>("GET", "/api/aliases"),
   options: () => request<Options>("GET", "/api/options"),
   create: (b: { name?: string; domain: string; forwardTo: string }) => request<{ alias: Alias }>("POST", "/api/aliases", b),
+  changeForward: (address: string, forwardTo: string) => request<{ alias: Alias }>("PATCH", `/api/aliases/${encodeURIComponent(address)}`, { forwardTo }),
   remove: (address: string) => request<void>("DELETE", `/api/aliases/${encodeURIComponent(address)}`),
   protonStatus: () => request<ProtonStatus>("GET", "/api/proton/status"),
   protonRefresh: () => request<void>("POST", "/api/proton/refresh", {}),

@@ -27,3 +27,11 @@
 - [x] T-3.4: 応答とログの項目を固定し、パスワードが出力されないことをテストする。
 - [x] T-3.5: 検証サーバで、実際のAPIに対する発行と削除を実行し、検証用アドレスが残らないことを確認する。
 - 検証: `npx vitest run tests/server && XREA_LIVE=1 npx vitest run tests/server/live.test.ts`
+
+## Phase 4: 転送先の変更
+
+- 対応: D-9
+- [x] T-4.1: 転送先の変更のルートと、入力の検証・アドレスの解決・キャッシュの破棄を実装する。
+- [x] T-4.2: 転送先の変更の単体テストを、受け入れ条件のタグ付きで追加する。
+- [x] T-4.3: 検証サーバで、実際のAPIに対する転送先の変更を実行し、検証用アドレスが残らないことを確認する。
+- 検証: `npx vitest run tests/server/aliasService.test.ts tests/server/http.test.ts && XREA_LIVE=1 npx vitest run tests/server/live.test.ts`

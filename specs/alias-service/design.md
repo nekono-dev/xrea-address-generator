@@ -2,29 +2,30 @@
 
 ## 1. 構成
 
-| パス                                | 責務                                         |
-| ----------------------------------- | -------------------------------------------- |
-| `src/server/main.ts`                | 設定の読み込み、各部品の組み立て、起動       |
-| `src/server/config.ts`              | 環境変数の読み込みと検証                     |
-| `src/server/app.ts`                 | ルーティング、エラー応答、画面ファイルの配信 |
-| `src/server/aliasService.ts`        | 一覧の合成、発行、削除、候補の導出           |
-| `src/server/validate.ts`            | 発行の入力の検証                             |
-| `src/server/randomName.ts`          | ランダムな名前の生成                         |
-| `src/server/words.ts`               | ランダム名に使う単語の辞書                   |
-| `src/server/listCache.ts`           | XREAの一覧のキャッシュ                       |
-| `src/server/mutex.ts`               | 変更要求の直列化                             |
-| `tests/server/aliasService.test.ts` | 一覧・発行・削除の単体テスト                 |
-| `tests/server/http.test.ts`         | HTTPの入出力と配信のテスト                   |
-| `tests/server/live.test.ts`         | 実際のAPIに対する発行と削除のテスト          |
+| パス                                | 責務                                             |
+| ----------------------------------- | ------------------------------------------------ |
+| `src/server/main.ts`                | 設定の読み込み、各部品の組み立て、起動           |
+| `src/server/config.ts`              | 環境変数の読み込みと検証                         |
+| `src/server/app.ts`                 | ルーティング、エラー応答、画面ファイルの配信     |
+| `src/server/aliasService.ts`        | 一覧の合成、発行、転送先の変更、削除、候補の導出 |
+| `src/server/validate.ts`            | 発行の入力の検証                                 |
+| `src/server/randomName.ts`          | ランダムな名前の生成                             |
+| `src/server/words.ts`               | ランダム名に使う単語の辞書                       |
+| `src/server/listCache.ts`           | XREAの一覧のキャッシュ                           |
+| `src/server/mutex.ts`               | 変更要求の直列化                                 |
+| `tests/server/aliasService.test.ts` | 一覧・発行・転送先の変更・削除の単体テスト       |
+| `tests/server/http.test.ts`         | HTTPの入出力と配信のテスト                       |
+| `tests/server/live.test.ts`         | 実際のAPIに対する発行と削除のテスト              |
 
 ## 2. 設計項目
 
-### D-1: HTTP API (FR-12)
+### D-1: HTTP API (FR-11)
 
 | メソッドとパス               | 要求                            | 成功応答                             |
 | ---------------------------- | ------------------------------- | ------------------------------------ |
 | GET /api/aliases             | なし                            | 200 { aliases, proton }              |
 | POST /api/aliases            | { name?, domain, forwardTo }    | 201 { alias }                        |
+| PATCH /api/aliases/:address  | { forwardTo }                   | 200 { alias }                        |
 | DELETE /api/aliases/:address | アドレスをURLエンコードしたパス | 204                                  |
 | GET /api/options             | なし                            | 200 { domains, forwardTargets }      |
 | GET /api/proton/status       | なし                            | 200 ProtonStatus                     |
@@ -53,8 +54,8 @@ export type ErrorCode =
 | ErrorCode        | HTTP | 発生条件                     |
 | ---------------- | ---- | ---------------------------- |
 | validation_error | 400  | 入力が規則に反する           |
-| forbidden        | 403  | 転送のみ以外の削除           |
-| not_found        | 404  | 削除対象が存在しない         |
+| forbidden        | 403  | 転送のみ以外の変更・削除     |
+| not_found        | 404  | 変更・削除の対象が存在しない |
 | conflict         | 409  | 同一アドレスがすでに存在する |
 | rate_limited     | 503  | XREAが送信間隔の超過を返した |
 | upstream_error   | 502  | XREAまたはネットワークの異常 |
@@ -178,7 +179,7 @@ export function deriveOptions(mails: MailEntry[]): {
 
 ドメインの候補は、受信方法を問わずすべてのアドレスのドメインから導出する。転送先の候補は、転送先が空でないすべてのアドレスから導出する。
 
-### D-6: Proton Passの状態 (FR-10)
+### D-6: Proton Passの状態 (FR-3)
 
 ```ts
 // GET /api/proton/status
@@ -201,21 +202,21 @@ export class ListCache {
   constructor(private ttlMs = 30_000) {}
   get(): Promise<MailEntry[]> // 有効期間内はメモリから返す
   fresh(): Promise<MailEntry[]> // 常にXREAから取り直す
-  invalidate(): void // 発行・削除の成功時に呼ぶ
+  invalidate(): void // 発行・転送先の変更・削除の成功時に呼ぶ
 }
 export class Mutex {
   run<T>(task: () => Promise<T>): Promise<T>
 } // 到着順に1件ずつ実行する
 ```
 
-| 区間                     | 時間の予算 |
-| ------------------------ | ---------- |
-| 一覧の取り直し           | 1.5秒      |
-| 作成または削除の呼び出し | 2.0秒      |
-| 排他の待ち（1件の待機）  | 1.0秒      |
-| 合計                     | 4.5秒      |
+| 区間                       | 時間の予算 |
+| -------------------------- | ---------- |
+| 一覧の取り直し             | 1.5秒      |
+| 作成・変更・削除の呼び出し | 2.0秒      |
+| 排他の待ち（1件の待機）    | 1.0秒      |
+| 合計                       | 4.5秒      |
 
-### D-8: 秘匿情報とデータ保存 (FR-11)
+### D-8: 秘匿情報とデータ保存 (FR-10)
 
 ```ts
 // 応答に載せる項目は Alias の5項目のみ。MailEntry を直接返さない
@@ -230,6 +231,40 @@ logger.info({ route: "GET /api/aliases", count }) // 本文・アドレスの一
 | XREAのパスワード項目 | クライアントが取り除くため、サービスには到達しない |
 | 永続化               | データベースとファイルへの書き込みをしない         |
 | ログ                 | ルート名・件数・所要時間・エラーコードのみ         |
+
+### D-9: 転送先の変更 (FR-12)
+
+```ts
+export async function changeForward(
+  address: string,
+  forwardTo: string,
+): Promise<Alias> {
+  if (!MAIL_RE.test(forwardTo.trim())) throw new AppError("validation_error")
+  return mutex.run(async () => {
+    let target: MailEntry | undefined
+    // 一覧の取り直し・アドレスの解決・送信はクライアントが続けて行う（番号のずれを防ぐ）
+    await xrea.mailChangeForward(address, forwardTo.trim(), (m) => {
+      if (!m) throw new AppError("not_found")
+      if (m.pop_how !== 1) throw new AppError("forbidden")
+      target = m
+    })
+    listCache.invalidate()
+    return toAlias(
+      { ...target, address_trans: forwardTo.trim() },
+      proton.getMap(),
+    )
+  })
+}
+```
+
+| 事象                     | 応答                          |
+| ------------------------ | ----------------------------- |
+| 転送先がメール形式でない | 400（排他の取得前に判定する） |
+| 一覧に存在しない         | 404                           |
+| 受信方法が転送のみ以外   | 403                           |
+| 現在と同じ転送先         | XREAへ送信して200を返す       |
+
+応答の項目は、解決したアドレスの項目の転送先を差し替えて組み立てる（一覧を再び取得しない）。
 
 ## 3. エラー処理
 

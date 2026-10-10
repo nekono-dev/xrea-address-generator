@@ -4,9 +4,9 @@ import { useEffect, useRef, useState } from "preact/hooks"
 export const MAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const isInvalidMail = (v: string): boolean => v.trim() !== "" && !MAIL_RE.test(v.trim())
 
-type Props = { value: string; onInput: (v: string) => void; candidates: string[]; onEnter: () => void; label: string; id?: string }
+type Props = { value: string; onInput: (v: string) => void; candidates: string[]; onEnter: () => void; onEscape?: () => void; label: string; id?: string; autoFocus?: boolean }
 
-export function Combobox({ value, onInput, candidates, onEnter, label, id }: Props) {
+export function Combobox({ value, onInput, candidates, onEnter, onEscape, label, id, autoFocus }: Props) {
   const [open, setOpen] = useState(false)
   const [hi, setHi] = useState(-1)
   const [typed, setTyped] = useState(false) // 文字を入力したときだけ候補を絞り込む
@@ -16,6 +16,13 @@ export function Combobox({ value, onInput, candidates, onEnter, label, id }: Pro
   const items = typed ? candidates.filter(c => c.toLowerCase().includes(q)) : candidates
   const invalid = isInvalidMail(value)
 
+  const quietFocus = useRef(false) // 自動のフォーカスでは候補を開かない（隣のボタンを隠さないため）
+  useEffect(() => {
+    if (!autoFocus) return
+    quietFocus.current = true
+    input.current?.focus()
+    quietFocus.current = false
+  }, [])
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
       if (root.current && !root.current.contains(e.target as Node)) setOpen(false)
@@ -40,6 +47,8 @@ export function Combobox({ value, onInput, candidates, onEnter, label, id }: Pro
       e.preventDefault()
       setHi(h => Math.max(h - 1, 0))
     } else if (e.key === "Escape") {
+      // 候補が閉じた状態の Escape は呼び出し元へ伝える
+      if (!open) onEscape?.()
       setOpen(false)
     } else if (e.key === "Tab") {
       setOpen(false)
@@ -76,7 +85,7 @@ export function Combobox({ value, onInput, candidates, onEnter, label, id }: Pro
         autocomplete="off"
         value={value}
         onFocus={() => {
-          setOpen(true)
+          if (!quietFocus.current) setOpen(true)
           setTyped(false)
         }}
         onInput={e => {

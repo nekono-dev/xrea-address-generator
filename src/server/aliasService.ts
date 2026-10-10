@@ -1,11 +1,11 @@
-// 一覧の合成、発行、削除、候補の導出。アプリ独自のデータは保存せず、XREAとProton Passから導き出す。
+// 一覧の合成、発行、転送先の変更、削除、候補の導出。アプリ独自のデータは保存せず、XREAとProton Passから導き出す。
 import type { AddressMap, ProtonReader, Status as ProtonStatus } from "../proton/index"
-import type { CreateMailInput } from "../xrea/client"
+import type { CreateMailInput, ForwardCheck } from "../xrea/client"
 import type { MailEntry } from "../xrea/errors"
 import { ListCache } from "./listCache"
 import { Mutex } from "./mutex"
 import { randomName } from "./randomName"
-import { normalizeName, validate, type CreateInput } from "./validate"
+import { MAIL_RE, normalizeName, validate, type CreateInput } from "./validate"
 import { WORDS } from "./words"
 
 export type Alias = { address: string; name: string; domain: string; forwardTo: string; protonEntries: string[] }
@@ -24,6 +24,7 @@ export class AppError extends Error {
 export type XreaPort = {
   mailList(): Promise<MailEntry[]>
   mailCreate(input: CreateMailInput): Promise<void>
+  mailChangeForward(address: string, forwardTo: string, check: ForwardCheck): Promise<void>
   mailDelete(nos: number[]): Promise<void>
 }
 
@@ -89,6 +90,22 @@ export class AliasService {
       await this.deps.xrea.mailCreate({ name, domain, forwardTo })
       this.listCache.invalidate()
       return toAlias({ address_name: name, address_domain: domain, address_trans: forwardTo }, this.deps.proton.getMap())
+    })
+  }
+
+  changeForward(address: string, forwardTo: string): Promise<Alias> {
+    const to = forwardTo.trim()
+    if (!MAIL_RE.test(to)) return Promise.reject(new AppError("validation_error", "転送先はメールアドレスの形式で指定してください"))
+    return this.mutex.run(async () => {
+      let target: MailEntry | undefined
+      // 一覧の取り直し・アドレスの解決・送信はクライアントが続けて行う（番号のずれを防ぐ）
+      await this.deps.xrea.mailChangeForward(address.trim(), to, m => {
+        if (!m) throw new AppError("not_found", `${address} は存在しません`)
+        if (m.pop_how !== FORWARD_ONLY) throw new AppError("forbidden", "転送のみのアドレス以外は変更できません")
+        target = m
+      })
+      this.listCache.invalidate()
+      return toAlias({ ...target!, address_trans: to }, this.deps.proton.getMap())
     })
   }
 

@@ -73,3 +73,61 @@ describe("メール作成・削除の送信内容", () => {
     expect(ok.pop_how).toBe(1)
   })
 })
+
+describe("転送先の変更の送信内容", () => {
+  const filters = {
+    "1": { no: 1, header_match: 1, body_match: 0, allow_stringcase: 1, save_mail: 0, conditions: [{ target: "subject", body: "x", condition: "match" }], action_body: "[x]", action_type: "change_subject" },
+  }
+  const raw = {
+    no: 7, address_name: "shop", address_domain: "example.com", address: "shop@example.com", pop_how: 1, address_trans: "old@mail.example",
+    pop_pass: "ENCRYPTED-PASS", quota: "0", quota_use_byte: 0, quota_use_per: 0, mail_num: 3,
+    autorespond: 1, autorespond_body: "不在です", clamd: 1, spamd: 0, customd: 1, customd_body: filters,
+  }
+  const other = { ...raw, no: 8, address_name: "other", address: "other@example.com", pop_pass: "OTHER" }
+
+  /** 一覧の要求には疑似の一覧を、編集の要求には成功を返す */
+  function listThenEdit() {
+    const calls: { url: string; body: URLSearchParams }[] = []
+    const fetch = async (url: string, init: { body: URLSearchParams }) => {
+      calls.push({ url, body: init.body })
+      const res = url.endsWith("/list") ? { status_code: 200, result: { "1": other, "2": raw } } : { status_code: 200 }
+      return { status: 200, text: async () => JSON.stringify(res) }
+    }
+    return { calls, fetch }
+  }
+
+  test("xrea-client/AC-13: 送信内容に一覧の番号・パスワード・フィルタ・自動返信と新しい転送先が含まれ、一覧専用の項目が含まれない", async () => {
+    const r = listThenEdit()
+    const seen: unknown[] = []
+    await new XreaClient(config, { fetch: r.fetch, queue: noWait() }).mailChangeForward("SHOP@example.com", "new@mail.example", e => {
+      seen.push(e)
+      if (!e) throw new Error("not found")
+    })
+    expect(r.calls.map(c => c.url.replace("https://api.xrea.com", ""))).toEqual(["/v1/mail/list", "/v1/mail/edit"])
+    const b = r.calls[1]!.body
+    expect(b.get("reset_flg")).toBe("0")
+    expect(b.get("param[0][no]")).toBe("7")
+    expect(b.get("param[0][address_trans]")).toBe("new@mail.example")
+    expect(b.get("param[0][pop_pass]")).toBe("ENCRYPTED-PASS")
+    expect(b.get("param[0][pop_how]")).toBe("1")
+    expect(b.get("param[0][autorespond]")).toBe("1")
+    expect(b.get("param[0][autorespond_body]")).toBe("不在です")
+    expect(b.get("param[0][customd_body][1][conditions][0][target]")).toBe("subject")
+    expect(b.get("param[0][customd_body][1][action_type]")).toBe("change_subject")
+    for (const k of ["mail_num", "quota_use_byte", "quota_use_per"]) expect(b.has(`param[0][${k}]`)).toBe(false)
+    // 検査へ渡す項目と、呼び出し元にはパスワードを渡さない
+    expect(seen[0]).toMatchObject({ no: 7, address_trans: "old@mail.example" })
+    expect(seen[0]).not.toHaveProperty("pop_pass")
+  })
+
+  test("検査が例外を送出したときは、編集の要求を送らない", async () => {
+    const r = listThenEdit()
+    const c = new XreaClient(config, { fetch: r.fetch, queue: noWait() })
+    await expect(
+      c.mailChangeForward("none@example.com", "new@mail.example", e => {
+        if (!e) throw new Error("not found")
+      }),
+    ).rejects.toThrow("not found")
+    expect(r.calls).toHaveLength(1)
+  })
+})

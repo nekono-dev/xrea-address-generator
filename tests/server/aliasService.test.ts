@@ -153,6 +153,40 @@ describe("削除", () => {
   })
 })
 
+describe("転送先の変更", () => {
+  const patch = (app: ReturnType<typeof createApp>, address: string, body: unknown) =>
+    app.request(`/api/aliases/${encodeURIComponent(address)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+
+  test("alias-service/AC-18: 転送先の変更の要求で、一覧から解決したアドレスと新しい転送先が変更の呼び出しに渡され、新しい転送先を持つ項目が返る", async () => {
+    const { service, xrea } = setup()
+    const app = createApp({ service, logger: silent })
+    await service.listAliases() // キャッシュを作る
+    const res = await patch(app, "SNS@example.net", { forwardTo: " new@mail.example " })
+    expect(res.status).toBe(200)
+    expect((await res.json()).alias).toEqual({ address: "sns@example.net", name: "sns", domain: "example.net", forwardTo: "new@mail.example", protonEntries: ["Bluesky", "X (Twitter)"] })
+    expect(xrea.changed).toEqual([{ no: 3, forwardTo: "new@mail.example" }])
+    // 変更の成功時にキャッシュを破棄する
+    const after = (await service.listAliases()).aliases.find(a => a.address === "sns@example.net")
+    expect(after?.forwardTo).toBe("new@mail.example")
+  })
+
+  test("alias-service/AC-19: 存在しないアドレスは404、転送のみでないアドレスは403、形式不正の転送先は400になり、変更の呼び出しが行われない", async () => {
+    const { service, xrea } = setup()
+    const app = createApp({ service, logger: silent })
+    expect((await patch(app, "none@example.com", { forwardTo: "new@mail.example" })).status).toBe(404)
+    expect((await patch(app, "mail@example.net", { forwardTo: "new@mail.example" })).status).toBe(403)
+    expect((await patch(app, "mail@example.com", { forwardTo: "new@mail.example" })).status).toBe(403)
+    for (const forwardTo of ["not-mail", "", "a b@c.d"]) {
+      const res = await patch(app, "shop@example.com", { forwardTo })
+      expect(res.status).toBe(400)
+      expect((await res.json()).error.code).toBe("validation_error")
+    }
+    expect((await patch(app, "shop@example.com", {})).status).toBe(400)
+    expect(xrea.calls).not.toContain("change")
+    expect(xrea.changed).toEqual([])
+  })
+})
+
 describe("秘匿情報と応答時間", () => {
   test("alias-service/AC-12: 一覧の応答とログに、パスワード項目の文字列が含まれない", async () => {
     const xrea = new FakeXrea(sampleMails().map(m => ({ ...m, pop_pass: "XREA-SECRET-PASSWORD" }) as never))
@@ -166,7 +200,7 @@ describe("秘匿情報と応答時間", () => {
     expect(lines.join("\n")).not.toContain("shop@example.com")
   })
 
-  test("alias-service/AC-15: XREAの応答を1.2秒遅らせた状態で、発行と削除の応答が5秒以内に返る", async () => {
+  test("alias-service/AC-15: XREAの応答を1.2秒遅らせた状態で、発行・転送先の変更・削除の応答が5秒以内に返る", async () => {
     const { service, xrea } = setup()
     xrea.delayMs = 1200
     const app = createApp({ service, logger: silent })
@@ -175,10 +209,14 @@ describe("秘匿情報と応答時間", () => {
     expect(created.status).toBe(201)
     expect(performance.now() - start).toBeLessThan(5000)
     start = performance.now()
+    const changed = await app.request("/api/aliases/slow%40example.com", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ forwardTo: "new@mail.example" }) })
+    expect(changed.status).toBe(200)
+    expect(performance.now() - start).toBeLessThan(5000)
+    start = performance.now()
     const deleted = await app.request("/api/aliases/slow%40example.com", { method: "DELETE" })
     expect(deleted.status).toBe(204)
     expect(performance.now() - start).toBeLessThan(5000)
-  }, 15_000)
+  }, 20_000)
 
   test("AppError はコードとメッセージを持つ", () => {
     const e = new AppError("forbidden", "x")

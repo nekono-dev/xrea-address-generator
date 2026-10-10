@@ -13,12 +13,13 @@ const posts = (api: Awaited<ReturnType<typeof mockApi>>) => api.requests.filter(
 
 test.describe("発行フォームと部品", () => {
   for (const width of [900, 360]) {
-    test(`web-ui/AC-13: 4つの部品の描画後の高さが、いずれも38ピクセルになる（幅${width}）`, async ({ page }) => {
+    test(`web-ui/AC-13: 4つの部品の描画後の高さが、幅900ピクセルで38ピクセル、幅360ピクセルで44ピクセルになる（幅${width}）`, async ({ page }) => {
       await open(page, width)
       const heights = await page.evaluate(() =>
         ["#name", "#issue", "#domain .dd-btn", "#target input"].map(s => Math.round(document.querySelector(s)!.getBoundingClientRect().height)),
       )
-      expect(heights).toEqual([38, 38, 38, 38])
+      const h = width < 680 ? 44 : 38
+      expect(heights).toEqual([h, h, h, h])
     })
 
     test(`web-ui/AC-16: 両方の候補リストの全項目が最前面に表示される（幅${width}）`, async ({ page }) => {

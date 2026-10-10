@@ -28,9 +28,17 @@ export type RawMailEntry = components["schemas"]["v1_mail_list_response_result"]
 /** パスワード項目を取り除いたメールアドレスの情報 */
 export type MailEntry = Omit<RawMailEntry, "pop_pass">
 
-/** 番号をキーとするオブジェクトを、番号の昇順の配列にする。パスワード項目はここで取り除く */
+/** パスワード項目を取り除く */
+export function omitSecret({ pop_pass: _secret, ...rest }: RawMailEntry): MailEntry {
+  return rest
+}
+
+/** 番号をキーとするオブジェクトを、番号の昇順の配列にする */
+export function sortedEntries(raw: Record<string, RawMailEntry> | undefined): RawMailEntry[] {
+  return Object.values(raw ?? {}).sort((a, b) => a.no - b.no)
+}
+
+/** 番号の昇順の配列にし、パスワード項目を取り除く */
 export function normalizeList(raw: Record<string, RawMailEntry> | undefined): MailEntry[] {
-  return Object.values(raw ?? {})
-    .map(({ pop_pass: _secret, ...rest }) => rest)
-    .sort((a, b) => a.no - b.no)
+  return sortedEntries(raw).map(omitSecret)
 }

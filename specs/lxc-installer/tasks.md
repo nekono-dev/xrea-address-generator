@@ -29,5 +29,5 @@
 
 - 対応: D-7
 - [x] T-4.1: ワークフローに、プロジェクト固有の検査と、出力先 installer-dist を設定する。
-- [ ] T-4.2: ブランチとタグのプッシュ、手動実行での生成と添付を確認する。
+- [x] T-4.2: ブランチとタグのプッシュ、手動実行での生成と添付を確認する。
 - 検証: `for f in installer/*.sh; do sh -n "$f"; done && shellcheck -S warning installer/*.sh`

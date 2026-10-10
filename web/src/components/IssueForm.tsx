@@ -1,8 +1,9 @@
 // 発行フォーム。名前・ドメイン・発行ボタン・転送先から成る。
 import { useEffect, useState } from "preact/hooks"
 import { api } from "../api"
+import { loadPrefs, savePrefs } from "../prefs"
 import { store as defaultStore, useStore, type Store } from "../store"
-import { Combobox, isInvalidMail } from "./Combobox"
+import { Combobox, isInvalidMail, MAIL_RE } from "./Combobox"
 import { Dropdown } from "./Dropdown"
 
 const isImeEnter = (e: KeyboardEvent) => e.isComposing || e.keyCode === 229
@@ -11,14 +12,15 @@ export function IssueForm({ store = defaultStore }: { store?: Store }) {
   const options = useStore(s => s.options, store)
   const optionsError = useStore(s => s.optionsError, store)
   const [name, setName] = useState("")
-  const [domain, setDomain] = useState("")
-  const [target, setTarget] = useState("")
+  // 最後に選んだドメインと、最後に指定した有効な転送先を初期値にする
+  const [domain, setDomain] = useState(() => loadPrefs().domain ?? "")
+  const [target, setTarget] = useState(() => loadPrefs().forwardTo ?? "")
   const [targetTouched, setTargetTouched] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  // 候補の取得後に、既定のドメインと転送先を入れる
+  // 候補の取得後に、既定のドメインと転送先を入れる（保存したドメインが候補に無ければ先頭の候補にする）
   useEffect(() => {
-    if (!domain || !options.domains.includes(domain)) setDomain(options.domains[0] ?? "")
+    if (options.domains.length && !options.domains.includes(domain)) setDomain(options.domains[0]!)
     if (!targetTouched && !target && options.forwardTargets[0]) setTarget(options.forwardTargets[0])
   }, [options])
 
@@ -60,7 +62,11 @@ export function IssueForm({ store = defaultStore }: { store?: Store }) {
           }}
         />
         <span class="at">@</span>
-        <Dropdown id="domain" label="ドメイン" items={options.domains} value={domain || "ドメインなし"} onChange={setDomain} disabled={!options.domains.length} />
+        <Dropdown id="domain" label="ドメイン" items={options.domains} value={domain || "ドメインなし"} onChange={v => {
+            setDomain(v)
+            savePrefs({ domain: v })
+          }}
+          disabled={!options.domains.length} />
         <button type="button" class="btn" id="issue" disabled={!canIssue} onClick={() => void issue()}>
           発行
         </button>
@@ -75,6 +81,7 @@ export function IssueForm({ store = defaultStore }: { store?: Store }) {
           onInput={v => {
             setTarget(v)
             setTargetTouched(true)
+            if (MAIL_RE.test(v.trim())) savePrefs({ forwardTo: v.trim() })
           }}
           onEnter={() => void issue()}
         />

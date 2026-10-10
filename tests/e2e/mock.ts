@@ -51,6 +51,13 @@ export async function mockApi(page: Page, init: { aliases?: Alias[]; proton?: Pr
         state.aliases.push(a)
         return json(201, { alias: a })
       }
+      case "PATCH /api/aliases/:address": {
+        const address = decodeURIComponent(url.pathname.split("/").pop()!)
+        const a = state.aliases.find(x => x.address === address)
+        if (!a) return json(404, { error: { code: "not_found", message: `${address} は存在しません` } })
+        a.forwardTo = body.forwardTo
+        return json(200, { alias: a })
+      }
       case "DELETE /api/aliases/:address": {
         const address = decodeURIComponent(url.pathname.split("/").pop()!)
         state.aliases = state.aliases.filter(a => a.address !== address)

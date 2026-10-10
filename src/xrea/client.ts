@@ -1,5 +1,5 @@
 // XREAのメールAPIの型付きクライアント。認証項目の付与、送信、応答の正規化を行う。
-import { normalizeList, toResult, XreaError, type MailEntry, type RawMailEntry } from "./errors"
+import { omitSecret, sortedEntries, toResult, XreaError, type MailEntry, type RawMailEntry } from "./errors"
 import { toFormBody, type FormObject } from "./form"
 import type { paths } from "./generated/schema"
 import { EndpointQueue } from "./queue"
@@ -46,6 +46,18 @@ export function createParam(input: CreateMailInput): MailEditParam {
   }
 }
 
+// 一覧専用の項目。編集の要求には含めない
+export const LIST_ONLY = ["mail_num", "quota_use_byte", "quota_use_per"] as const
+
+/** 一覧の項目（番号・パスワード・フィルタ・自動返信を含む）をそのまま使い、転送先だけを差し替える */
+export function changeForwardParam(raw: RawMailEntry, forwardTo: string): MailEditParam {
+  const param = Object.fromEntries(Object.entries(raw).filter(([k]) => !(LIST_ONLY as readonly string[]).includes(k)))
+  return { ...param, address_trans: forwardTo } as MailEditParam
+}
+
+/** 転送先の変更の前に、解決したアドレスを検査する。変更させないときは例外を送出する */
+export type ForwardCheck = (entry: MailEntry | undefined) => asserts entry is MailEntry
+
 export class XreaClient {
   private readonly queue: EndpointQueue
 
@@ -86,8 +98,13 @@ export class XreaClient {
     })
   }
 
+  // パスワード項目を含む一覧。クラスの外へは出さない
+  private async rawList(body: MailListBody = {}): Promise<RawMailEntry[]> {
+    return sortedEntries(await this.post<Record<string, RawMailEntry>>("/v1/mail/list", body as FormObject))
+  }
+
   async mailList(body: MailListBody = {}): Promise<MailEntry[]> {
-    return normalizeList(await this.post<Record<string, RawMailEntry>>("/v1/mail/list", body as FormObject))
+    return (await this.rawList(body)).map(omitSecret)
   }
 
   async mailEdit(body: MailEditBody): Promise<void> {
@@ -96,6 +113,15 @@ export class XreaClient {
 
   async mailCreate(input: CreateMailInput): Promise<void> {
     await this.mailEdit({ reset_flg: 0, param: [createParam(input)] })
+  }
+
+  /** 一覧を取り直してアドレスを解決し、check の検査を通ったものだけ転送先を変更する */
+  async mailChangeForward(address: string, forwardTo: string, check: ForwardCheck): Promise<void> {
+    const key = address.toLowerCase()
+    const raw = (await this.rawList()).find(m => `${m.address_name}@${m.address_domain}`.toLowerCase() === key)
+    check(raw && omitSecret(raw))
+    // 一覧の取得の直後に送る（削除や変更の後に、ほかのアドレスの番号が変わり得るため）
+    await this.mailEdit({ reset_flg: 0, param: [changeForwardParam(raw!, forwardTo)] })
   }
 
   async mailDelete(nos: number[]): Promise<void> {

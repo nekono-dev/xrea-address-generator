@@ -56,6 +56,10 @@ components:
             type: integer
     v1_mail_edit_param:
       properties:
+        no:
+          # 既存のアドレスを編集するときの番号。省くと新規作成として扱われ、同じアドレスは重複として拒否される
+          type: integer
+          description: 編集するアドレスの番号（一覧の no）
         pop_how:
           # 説明文と表で意味が食い違うため、実アカウントの値と転送先の有無から確定した意味に固定する
           enum: [1, 2, 3, 4]
@@ -65,6 +69,32 @@ components:
           # ドキュメントは 1 以上とするが、転送のみのアドレスは 0 を受理する
           examples: null
           minimum: 0
+        customd_body:
+          # 一覧の値（番号をキーとするオブジェクト、未設定なら空文字列）をそのまま再送信すると受理される
+          type: [string, array, object]
+          additionalProperties:
+            $ref: "#/components/schemas/v1_mail_edit_param_customd_body"
+    v1_mail_edit_param_customd_body:
+      properties:
+        # 一覧の値に含まれ、再送信しても受理される項目
+        no:
+          type: integer
+        header_match:
+          type: integer
+        body_match:
+          type: integer
+        conditions:
+          # 単一の条件のオブジェクトは形式不正として拒否され、条件の配列（または番号キーのオブジェクト）で受理される
+          $ref: null
+          type: [array, object]
+          items:
+            $ref: "#/components/schemas/v1_mail_edit_param_customd_body_conditions"
+          additionalProperties:
+            $ref: "#/components/schemas/v1_mail_edit_param_customd_body_conditions"
+    v1_mail_edit_param_customd_body_conditions:
+      properties:
+        condition:
+          description: match：を含む notmatch：を含まない byte_below：バイト以下 byte_above：バイト以上 none：指定無し(japaneseやnotjapanese等)
     v1_mail_list_response_result:
       required: [address, address_domain, address_name, address_trans, no, pop_how, quota]
       properties:
@@ -90,6 +120,24 @@ components:
         mail_num:
           type: [string, integer]
           examples: null
-        # フィルターが無いときは空文字列を返す
+        # フィルターが無いときは空文字列、あるときは番号（"1" から始まる文字列）をキーとするオブジェクトを返す
         customd_body:
-          type: [string, array]
+          type: [string, object]
+          items: null
+          additionalProperties:
+            $ref: "#/components/schemas/v1_mail_list_response_result_customd_body"
+    v1_mail_list_response_result_customd_body:
+      properties:
+        no:
+          type: integer
+        header_match:
+          type: integer
+        body_match:
+          type: integer
+        conditions:
+          # 応答は条件の配列
+          $ref: null
+          type: array
+          items:
+            $ref: "#/components/schemas/v1_mail_list_response_result_customd_body_conditions"
+

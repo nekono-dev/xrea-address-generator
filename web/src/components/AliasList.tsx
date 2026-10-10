@@ -1,8 +1,10 @@
-// 一覧と行の操作（絞り込み、並び替え、コピー、行内の確認つき削除）。
+// 一覧と行の操作（絞り込み、並び替え、コピー、転送先の変更、行内の確認つき削除）。
 import { useEffect, useRef, useState } from "preact/hooks"
 import { api, type Alias, type ProtonStatus } from "../api"
+import { savePrefs } from "../prefs"
 import { ALL_DOMAINS, store as defaultStore, useStore, view, type SortOrder, type Store } from "../store"
 import { Dropdown } from "./Dropdown"
+import { ForwardEdit } from "./ForwardEdit"
 import { Segmented } from "./Segmented"
 
 export function confirmText(a: Alias): string {
@@ -32,6 +34,7 @@ function ProtonLine({ proton, onRefresh }: { proton: ProtonStatus | null; onRefr
 
 function Row({ alias, loading, flash, store }: { alias: Alias; loading: boolean; flash: boolean; store: Store }) {
   const [confirming, setConfirming] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
@@ -72,7 +75,7 @@ function Row({ alias, loading, flash, store }: { alias: Alias; loading: boolean;
     <div class={`row${flash ? " flash" : ""}`} ref={ref} data-address={alias.address}>
       <div class="a">
         <div class="ad">{alias.address}</div>
-        <small>→ {alias.forwardTo}</small>
+        {editing ? <ForwardEdit alias={alias} store={store} onDone={() => setEditing(false)} /> : <small class="fwd">→ {alias.forwardTo}</small>}
         {loading ? (
           <div class="chips" aria-label="照合中">
             <span class="chip sk" />
@@ -105,6 +108,9 @@ function Row({ alias, loading, flash, store }: { alias: Alias; loading: boolean;
             <button type="button" class="ghost" data-copy onClick={() => void copy()}>
               コピー
             </button>
+            <button type="button" class="ghost" data-edit disabled={editing} onClick={() => setEditing(true)}>
+              変更
+            </button>
             <button type="button" class="ghost danger" data-delete onClick={() => setConfirming(true)}>
               削除
             </button>
@@ -133,7 +139,12 @@ export function AliasList({ store = defaultStore, onRefresh, onReload }: { store
         <h2>
           発行済み <span id="count">{shown.length}件</span>
         </h2>
-        <Dropdown id="filter" label="ドメインで絞り込み" items={[ALL_DOMAINS, ...domains]} value={filter ?? ALL_DOMAINS} onChange={v => store.set({ filter: v === ALL_DOMAINS ? null : v })} />
+        <Dropdown id="filter" label="ドメインで絞り込み" items={[ALL_DOMAINS, ...domains]} value={filter ?? ALL_DOMAINS} onChange={v => {
+            const filter = v === ALL_DOMAINS ? null : v
+            store.set({ filter })
+            savePrefs({ filter })
+          }}
+        />
         <Segmented<SortOrder>
           label="並び順"
           items={[
@@ -141,7 +152,10 @@ export function AliasList({ store = defaultStore, onRefresh, onReload }: { store
             { value: "desc", label: "Z→A" },
           ]}
           value={order}
-          onChange={v => store.set({ order: v })}
+          onChange={v => {
+            store.set({ order: v })
+            savePrefs({ order: v })
+          }}
         />
       </div>
       <ProtonLine proton={proton} onRefresh={onRefresh} />
