@@ -134,7 +134,7 @@ test.describe("タッチ操作", () => {
     await mockApi(page, { registered: false })
     await page.goto("/")
     await page.locator("#cred-proton").click()
-    const sizes = await page.evaluate(() => [...document.querySelectorAll("#credentials input")].map(i => parseFloat(getComputedStyle(i).fontSize)))
+    const sizes = await page.evaluate(() => [...document.querySelectorAll(".cred input")].map(i => parseFloat(getComputedStyle(i).fontSize)))
     expect(sizes).toHaveLength(4)
     for (const s of sizes) expect(s).toBeGreaterThanOrEqual(16)
   })

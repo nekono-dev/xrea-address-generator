@@ -64,7 +64,7 @@ export function CredentialsPanel({
 
   return (
     <main class="wrap">
-      <section class="cred" id="credentials" aria-labelledby="cred-title">
+      <section class="cred cred-head" id="credentials" aria-labelledby="cred-title">
         <h2 id="cred-title">XREAの認証情報を登録</h2>
         {notice && (
           <p class="cred-notice" role="status">
@@ -76,6 +76,7 @@ export function CredentialsPanel({
           <Combobox
             id="cred-server"
             name="server"
+            type="search"
             label="サーバ名"
             placeholder="検索して選択"
             noneText="該当するサーバがありません"
@@ -86,6 +87,9 @@ export function CredentialsPanel({
             onEnter={() => void submit()}
           />
         </div>
+      </section>
+      {/* サーバ名欄（autocomplete=off）とログインフォームを同じ区画に置くと、Proton Passがアカウントだけを補完しシークレットキーを補完しない。区画を分ける */}
+      <section class="cred cred-rest" aria-label="アカウントとシークレットキー">
         <form
           class="cred-form"
           onSubmit={e => {

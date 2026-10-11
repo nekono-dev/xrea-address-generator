@@ -215,6 +215,13 @@ h1 {
   width: 100%;
   padding-right: 34px;
 }
+/* type=search の標準の消去ボタンと見た目を消す（開閉ボタンと重ねないため） */
+.cb .fld[type="search"] {
+  appearance: none;
+}
+.cb .fld[type="search"]::-webkit-search-cancel-button {
+  display: none;
+}
 .cb .chev {
   position: absolute;
   right: 0;
@@ -521,6 +528,12 @@ h1 {
   width: min(100%, 28rem);
   margin: 0 auto;
   padding: 28px 0;
+}
+.cred-head {
+  padding-bottom: 14px;
+}
+.cred-rest {
+  padding-top: 0;
 }
 .cred h2 {
   margin: 0;

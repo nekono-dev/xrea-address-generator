@@ -20,9 +20,11 @@ type Props = {
   invalid?: boolean
   /** 該当する候補がないときの文言 */
   noneText?: string
+  /** input の type。Proton Pass が隣のログインフォームを誤判定しないよう、サーバ名では search にする */
+  type?: "text" | "search"
 }
 
-export function Combobox({ value, onInput, candidates, onEnter, onEscape, label, id, autoFocus, name, placeholder, invalid: invalidProp, noneText }: Props) {
+export function Combobox({ value, onInput, candidates, onEnter, onEscape, label, id, autoFocus, name, placeholder, invalid: invalidProp, noneText, type = "text" }: Props) {
   const [open, setOpen] = useState(false)
   const [hi, setHi] = useState(-1)
   const [typed, setTyped] = useState(false) // 文字を入力したときだけ候補を絞り込む
@@ -68,7 +70,8 @@ export function Combobox({ value, onInput, candidates, onEnter, onEscape, label,
       e.preventDefault()
       setHi(h => Math.max(h - 1, 0))
     } else if (e.key === "Escape") {
-      // 候補が閉じた状態の Escape は呼び出し元へ伝える
+      // 候補が閉じた状態の Escape は呼び出し元へ伝える。type=search の標準動作（入力の消去）は止める
+      if (type === "search") e.preventDefault()
       if (!open) onEscape?.()
       setOpen(false)
     } else if (e.key === "Tab") {
@@ -98,7 +101,7 @@ export function Combobox({ value, onInput, candidates, onEnter, onEscape, label,
         ref={input}
         class={`fld${invalid ? " bad" : ""}`}
         name={name}
-        role="combobox"
+        {...({ type, role: "combobox" } as Record<string, string>)} // 型定義が role=combobox に list 属性を要求するため、スプレッドで渡す
         aria-expanded={open}
         aria-autocomplete="list"
         aria-label={label}
