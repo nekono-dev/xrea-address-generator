@@ -2,11 +2,14 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { Miniflare, Response as MfResponse } from "miniflare"
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest"
+import { sampleMails } from "../gateway/fakes"
 import { BODY, ENV, makeApp, makeFetch } from "./helpers"
 import { bundleWorker } from "./workerBundle"
 
 let mf: Miniflare
+const xreaFake = () =>
+  Response.json({ status_code: 200, result: Object.fromEntries(sampleMails().map((m, i) => [String(i), { ...m, pop_pass: "x" }])) })
 const fx = makeFetch({})
 
 beforeAll(async () => {
@@ -23,8 +26,14 @@ beforeAll(async () => {
         compatibilityDate: "2026-08-01",
         bindings: ENV,
         assets: { directory: dir, binding: "ASSETS", routerConfig: { has_user_worker: true, static_routing: { user_worker: ["/api/*", "/healthz"] } }, assetConfig: { not_found_handling: "none" } },
-        // Worker からの外向きの要求（ゲートウェイと読み取りサービス）を、偽の実装へ向ける
-        outboundService: async (req: any) => (await fx.fetch(req.url, { method: req.method, headers: req.headers, body: req.body && (await req.text()) })) as unknown as MfResponse,
+        // ゲートウェイは Worker 内の Durable Object として動く（実物のクラスを使う）
+        durableObjects: { GATEWAY: "GatewayTenant" },
+        unsafeEphemeralDurableObjects: true,
+        // Worker からの外向きの要求を偽の実装へ向ける。XREA は一覧の応答だけを返し、読み取りサービスは偽の実装に渡す
+        outboundService: async (req: any) => {
+          if (new URL(req.url).host === "api.xrea.com") return xreaFake() as unknown as MfResponse
+          return (await fx.fetch(req.url, { method: req.method, headers: req.headers, body: req.body && (await req.text()) })) as unknown as MfResponse
+        },
       },
     ],
   })
@@ -50,6 +59,22 @@ describe("Workersの実行環境", () => {
     // 未登録は401
     expect((await mf.dispatchFetch("http://app.test/api/aliases")).status).toBe(401)
     expect(await (await mf.dispatchFetch("http://app.test/healthz")).json()).toEqual({ ok: true })
+  }, 30_000)
+
+  test("alias-service/AC-27: Node.jsではゲートウェイの呼び出しがネットワークを使わず、Workersでは Durable Object を通して一覧が返る", async () => {
+    const spy = vi.spyOn(globalThis, "fetch")
+    const node = await makeApp()
+    const cookie = await node.register()
+    expect((await node.app.request("/api/aliases", { headers: { cookie } })).status).toBe(200)
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
+    expect(node.seen.gateway.length).toBeGreaterThan(0)
+    // Workers: 登録（一覧の取得）と一覧が、束縛 GATEWAY の Durable Object を通って成功する
+    const put = await mf.dispatchFetch("http://app.test/api/credentials", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ xrea: { account: "other-acct", serverName: "s1.xrea.com", apiSecretKey: "OTHER-KEY" } }) })
+    expect(put.status).toBe(204)
+    const res = await mf.dispatchFetch("http://app.test/api/aliases", { headers: { cookie: put.headers.get("set-cookie")!.split(";")[0]! } })
+    expect(res.status).toBe(200)
+    expect((await res.json() as any).aliases.length).toBeGreaterThan(0)
   }, 30_000)
 
   test("alias-service/AC-12: Workersで版を含む画面ファイルが1年間のキャッシュの指示を伴い、未知のパスは入口を返す", async () => {

@@ -15,7 +15,7 @@ const tmp = (text: string) => {
 }
 const read = (p: string) => fs.readFileSync(p, "utf8")
 const servers = async (env: Record<string, string>) => {
-  const app = await buildApi(loadAppConfig({ ...ENV, ...env }, { readFile: read }), { log: silentLogger })
+  const app = await buildApi(loadAppConfig({ ...ENV, ...env }, { readFile: read }), { gateway: async () => new Response(null, { status: 500 }), log: silentLogger })
   return app.request("/api/servers")
 }
 

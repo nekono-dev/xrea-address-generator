@@ -1,9 +1,9 @@
 // アカウントごとのクライアント・キャッシュ・排他の保持。
-import { createHash } from "node:crypto"
 import { XreaClient, type XreaConfig } from "../xrea/client"
 import { ListCache } from "./listCache"
 import { Mutex } from "./mutex"
 import type { XreaPort } from "./service"
+import { tenantKey } from "./tenantKey"
 
 export type Tenant = { xrea: XreaPort; cache: ListCache; mutex: Mutex; lastUsed: number; serverName: string }
 
@@ -18,9 +18,9 @@ export class Registry {
     private ttlMs = 30_000,
   ) {}
 
-  /** key = sha256(account + "\0" + serverName + "\0" + apiSecretKey) の16進。無ければ作る */
-  get(creds: XreaConfig): Tenant {
-    const key = createHash("sha256").update(`${creds.account}\0${creds.serverName}\0${creds.apiSecretKey}`).digest("hex")
+  /** key = tenantKey(creds)（sha256 の16進）。無ければ作る */
+  async get(creds: XreaConfig): Promise<Tenant> {
+    const key = await tenantKey(creds)
     this.evict()
     let t = this.tenants.get(key)
     if (!t) {

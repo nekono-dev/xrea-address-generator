@@ -1,7 +1,7 @@
 // 内部サービスのURLの通信方式とホストの検査。文字列だけで判定し、名前解決は行わない。
 export type HttpPolicy = "all" | "external"
 
-const INTERNAL_NAMES = new Set(["xrea-gateway", "proton-reader", "localhost", "[::1]"])
+const INTERNAL_NAMES = new Set(["proton-reader", "localhost", "[::1]"])
 
 function ipv4(hostname: string): number[] | null {
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(hostname)

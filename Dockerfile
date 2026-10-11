@@ -3,7 +3,7 @@ WORKDIR /src
 COPY package*.json ./
 RUN npm ci
 COPY . .
-# dist/app・dist/gateway・dist/reader・dist/web を生成する
+# dist/app・dist/reader・dist/web を生成する
 RUN npm run build
 
 FROM node:22-bookworm-slim AS deps
@@ -12,7 +12,7 @@ COPY package*.json ./
 # 実行に必要な依存だけを取得する
 RUN npm ci --omit=dev
 
-# アプリとゲートウェイ（同一イメージ。起動するコマンドだけが異なる）。公式CLIを含めない
+# アプリ（XREAゲートウェイを内蔵する）。公式CLIを含めない
 FROM node:22-bookworm-slim AS app
 WORKDIR /app
 COPY --from=build /src/dist /app/dist

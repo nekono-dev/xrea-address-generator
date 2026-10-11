@@ -1,6 +1,6 @@
 // コンテナ基盤の要件の検査と、配備後の疎通確認。
 //   npx tsx scripts/cloud/check.ts platform --max-instances 1 --https true --internal-token true
-//   npx tsx scripts/cloud/check.ts probe --app https://... --gateway https://... [--reader https://...]
+//   npx tsx scripts/cloud/check.ts probe --app https://... [--reader https://...]
 // 秘匿値は出力に含めず、成功と失敗の別だけを報告する。
 
 export type PlatformSpec = { maxInstances: number; https: boolean; hasInternalToken: boolean }
@@ -14,7 +14,6 @@ function check(name: string, p: PlatformSpec): string[] {
 }
 
 /** 違反の説明の配列。最大インスタンス数が1以外、HTTPS でない、共有シークレットが無いと違反 */
-export const checkGateway = (p: PlatformSpec): string[] => check("ゲートウェイ", p)
 export const checkReader = (p: PlatformSpec): string[] => check("読み取りサービス", p)
 
 export type Probe = { name: string; ok: boolean; detail: string }
@@ -22,7 +21,7 @@ export const PROBE_DEADLINE_MS = 60_000
 
 /** 60秒の締め切りの中で、次を順に確認する */
 export async function probe(
-  env: { app: string; gateway: string; reader?: string },
+  env: { app: string; reader?: string },
   opts: { fetch?: typeof fetch; deadlineMs?: number } = {},
 ): Promise<Probe[]> {
   const f = opts.fetch ?? fetch
@@ -43,8 +42,6 @@ export async function probe(
   const bad = { xrea: { account: "probe", serverName: "probe.invalid", apiSecretKey: "probe" } }
   const results: Probe[] = [
     await run("Workers の死活確認", status(200), url(env.app, "/healthz")),
-    await run("ゲートウェイの死活確認", status(200), url(env.gateway, "/health")),
-    await run("ゲートウェイは共有シークレットなしを拒否する", status(401), url(env.gateway, "/v1/aliases")),
   ]
   if (env.reader) {
     results.push(
@@ -52,10 +49,10 @@ export async function probe(
       await run("読み取りサービスは共有シークレットなしを拒否する", status(401), url(env.reader, "/v1/entries")),
     )
   }
-  // 誤った認証情報の登録が 400 invalid_credentials になれば、Workers→ゲートウェイの共有シークレットが一致している
+  // 誤った認証情報の登録が 400 invalid_credentials になれば、内蔵ゲートウェイ（Durable Object）がXREAへ到達して拒否された応答を受け取っている
   results.push(
     await run(
-      "共有シークレットの一致（誤った認証情報の登録が400になる）",
+      "XREAへの到達（誤った認証情報の登録が400になる）",
       async r => r.status === 400 && ((await r.json()) as { error?: { code?: string } }).error?.code === "invalid_credentials" && !r.headers.has("set-cookie"),
       url(env.app, "/api/credentials"),
       { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(bad) },
@@ -73,19 +70,18 @@ async function main(argv: string[]): Promise<number> {
   const [cmd, ...rest] = argv
   if (cmd === "platform") {
     const p: PlatformSpec = { maxInstances: Number(arg(rest, "max-instances")), https: arg(rest, "https") === "true", hasInternalToken: arg(rest, "internal-token") === "true" }
-    const errors = [...checkGateway(p), ...(arg(rest, "reader") === "true" ? checkReader(p) : [])]
+    const errors = checkReader(p)
     for (const e of errors) console.error(e)
     console.log(errors.length ? "要件を満たしていません" : "要件を満たしています")
     return errors.length ? 1 : 0
   }
   if (cmd === "probe") {
     const app = arg(rest, "app")
-    const gateway = arg(rest, "gateway")
-    if (!app || !gateway) {
-      console.error("--app と --gateway を指定してください")
+    if (!app) {
+      console.error("--app を指定してください")
       return 2
     }
-    const results = await probe({ app, gateway, reader: arg(rest, "reader") })
+    const results = await probe({ app, reader: arg(rest, "reader") })
     for (const r of results) console.log(`${r.ok ? "成功" : "失敗"}: ${r.name}（${r.detail}）`)
     return results.every(r => r.ok) ? 0 : 1
   }

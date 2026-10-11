@@ -6,7 +6,7 @@
 | --------------------------- | ----------------------------------------------------- |
 | `src/app/api.ts`            | APIのルーティングとエラー応答（実行環境に依存しない） |
 | `src/app/service.ts`        | 一覧の合成、中継、照合状態の組み立て                  |
-| `src/app/gatewayClient.ts`  | ゲートウェイへの要求                                  |
+| `src/app/gatewayClient.ts`  | ゲートウェイへの要求と打ち切り                        |
 | `src/app/readerClient.ts`   | 読み取りサービスへの要求と死活確認                    |
 | `src/app/config.ts`         | 環境変数の読み込みと検証                              |
 | `src/app/servers.ts`        | サーバ名の一覧の読み込みと検証                        |
@@ -78,7 +78,7 @@ export function createApi(deps: {
 }
 ```
 
-ゲートウェイのエラーは、本文の code と HTTP の状態をそのまま返す。ゲートウェイの unauthorized（共有シークレットの不一致）は、利用者の認証情報の期限切れと区別するため、502 upstream_error「内部サービスの認証に失敗しました」に置き換える。
+ゲートウェイのエラーは、本文の code と HTTP の状態をそのまま返す。ゲートウェイの unauthorized は、アプリが認証情報の3項目を必ず付けるため通常は起きない。起きた場合は、利用者の認証情報の期限切れと区別するため、502 upstream_error「内部サービスの認証に失敗しました」に置き換える。
 
 ### D-2: 一覧の合成と照合状態 (FR-1, FR-2, FR-3)
 
@@ -121,14 +121,16 @@ async function readEntries(
 | 読み取りサービスが ready を返す         | ready                          | エントリ名（昇順）         |
 | 読み取りサービスへ接続できない・2秒超過 | error（kind: cli、固定の文言） | 空                         |
 
-### D-3: ゲートウェイへの中継 (FR-4, FR-6, FR-10, NFR-4)
+### D-3: ゲートウェイへの中継 (FR-4, FR-6, FR-9, FR-10, NFR-4)
 
 ```ts
+// 送信先 GatewayFetcher は実行環境が与える。Node.jsは同一プロセスのHonoアプリ、WorkersはアカウントごとのDurable Object
+import type { GatewayFetcher } from "../gateway/app"
+
 export class GatewayClient {
   constructor(
-    private baseUrl: string,
-    private token: string,
-    private fetch: typeof globalThis.fetch = globalThis.fetch,
+    private fetcher: GatewayFetcher,
+    private timeoutMs = 10_000,
   ) {}
   list(x: XreaCredentials): Promise<GatewayAlias[]>
   options(
@@ -144,16 +146,15 @@ export class GatewayClient {
   remove(x: XreaCredentials, address: string): Promise<void>
 }
 
-// 全要求に付ける。認証情報はヘッダのみで、URLと本文には載せない
+// 全要求に付ける。認証情報はヘッダのみで、URLと本文には載せない。URLの接続先は http://gateway.internal 固定
 const headers = (x: XreaCredentials) => ({
-  authorization: `Bearer ${token}`,
   "x-xrea-account": x.account,
   "x-xrea-server": x.serverName,
   "x-xrea-secret": x.apiSecretKey,
 })
 ```
 
-要求は10秒（AbortSignal.timeout）で打ち切り、接続の失敗・打ち切りは 502 upstream_error「XREAゲートウェイへ接続できません」にする。
+要求は10秒で打ち切る。呼び出しと打ち切りの時計を競わせ（Promise.race）、先に終わった方を採る。接続の失敗・打ち切りは 502 upstream_error「XREAゲートウェイへ接続できません」にする。
 
 ### D-4: 読み取りサービスへの中継 (FR-3, FR-6, FR-10, NFR-3)
 
@@ -199,17 +200,16 @@ const bindAddress =
   env.BIND_ADDRESS || (env.TUNNEL_TOKEN ? "127.0.0.1" : "0.0.0.0")
 ```
 
-| 環境変数           | 必須 | 既定値                                                  |
-| ------------------ | ---- | ------------------------------------------------------- |
-| XREA_GATEWAY_URL   | 必須 | なし                                                    |
-| INTERNAL_TOKEN     | 必須 | なし（32文字以上）                                      |
-| COOKIE_SECRET ほか | -    | 認証情報の保持の設定に従う                              |
-| PROTON_READER_URL  | 任意 | なし（未設定ならProton Pass連携を使わない）             |
-| TUNNEL_TOKEN       | 任意 | なし（BIND_ADDRESS の既定値を決めるためだけに参照する） |
-| BIND_ADDRESS       | 任意 | TUNNEL_TOKEN があれば 127.0.0.1、無ければ 0.0.0.0       |
-| PORT               | 任意 | 3000                                                    |
-| LOG_LEVEL          | 任意 | info                                                    |
-| XREA_SERVERS_FILE  | 任意 | なし（組み込みの一覧）                                  |
+| 環境変数           | 必須     | 既定値                                                       |
+| ------------------ | -------- | ------------------------------------------------------------ |
+| INTERNAL_TOKEN     | 条件付き | なし（PROTON_READER_URL を設定するときだけ必須。32文字以上） |
+| COOKIE_SECRET ほか | -        | 認証情報の保持の設定に従う                                   |
+| PROTON_READER_URL  | 任意     | なし（未設定ならProton Pass連携を使わない）                  |
+| TUNNEL_TOKEN       | 任意     | なし（BIND_ADDRESS の既定値を決めるためだけに参照する）      |
+| BIND_ADDRESS       | 任意     | TUNNEL_TOKEN があれば 127.0.0.1、無ければ 0.0.0.0            |
+| PORT               | 任意     | 3000                                                         |
+| LOG_LEVEL          | 任意     | info                                                         |
+| XREA_SERVERS_FILE  | 任意     | なし（組み込みの一覧）                                       |
 
 ### D-7: Workersの入口 (FR-9, NFR-1, NFR-2)
 
@@ -232,6 +232,7 @@ export default {
 
 | 項目             | 内容                                                                                               |
 | ---------------- | -------------------------------------------------------------------------------------------------- |
+| ゲートウェイ     | 環境の束縛 GATEWAY（Durable Object）を通して呼び出し、URLと共有シークレットを使わない              |
 | キャッシュの指示 | 配備する画面ファイルのヘッダ定義で、/assets/ を1年（immutable）、それ以外を no-cache にする        |
 | 禁止             | node: の組み込みモジュール、ファイル、プロセスの環境変数に依存する部品を、このスクリプトに含めない |
 | 設定             | 環境の束縛（変数と秘密）を config.ts の読み込み関数へ渡す。形式は process.env と同じ文字列の辞書   |
@@ -285,12 +286,12 @@ api.get("/api/capabilities", async c => {
 
 ## 3. エラー処理
 
-| 事象                                 | 処理                                                               |
-| ------------------------------------ | ------------------------------------------------------------------ |
-| 必須の環境変数が未設定               | 不足している変数名を示して異常終了する（Workersでは500で応答する） |
-| 要求の本文が不正なJSON               | 400 validation_error を返す                                        |
-| ゲートウェイへ接続できない・超過     | 502 upstream_error を返す                                          |
-| ゲートウェイの共有シークレットの拒否 | 502 upstream_error を返し、利用者の認証情報の問題と区別する        |
-| 読み取りサービスの失敗               | 一覧は返し、照合の状態を error にする                              |
-| 死活確認の失敗・打ち切り             | 利用可否を unavailable にして200で返す                             |
-| 想定外の例外                         | 500 を返し、詳細をログにのみ記録する                               |
+| 事象                             | 処理                                                               |
+| -------------------------------- | ------------------------------------------------------------------ |
+| 必須の環境変数が未設定           | 不足している変数名を示して異常終了する（Workersでは500で応答する） |
+| 要求の本文が不正なJSON           | 400 validation_error を返す                                        |
+| ゲートウェイへ接続できない・超過 | 502 upstream_error を返す                                          |
+| ゲートウェイの unauthorized      | 502 upstream_error を返し、利用者の認証情報の問題と区別する        |
+| 読み取りサービスの失敗           | 一覧は返し、照合の状態を error にする                              |
+| 死活確認の失敗・打ち切り         | 利用可否を unavailable にして200で返す                             |
+| 想定外の例外                     | 500 を返し、詳細をログにのみ記録する                               |

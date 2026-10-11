@@ -8,6 +8,7 @@ import { createSqlStore, type SqlClient } from "../credentials/sqliteStore"
 import type { CredentialStore } from "../credentials/types"
 import { AppError, STATUS, errorBody } from "../shared/errors"
 import { consoleLogger, type Logger } from "../shared/logger"
+import type { GatewayFetcher } from "../gateway/app"
 import { GatewayClient } from "./gatewayClient"
 import { ReaderClient } from "./readerClient"
 import { AppService } from "./service"
@@ -99,7 +100,7 @@ export function createApi(deps: { service: AppService; store: CredentialStore; l
 }
 
 /** 設定から保持方式・クライアント・APIを組み立てる。SQL方式のときは db を渡す */
-export async function buildApi(config: AppConfig, opts: { db?: SqlClient; fetch?: typeof fetch; log?: Logger } = {}) {
+export async function buildApi(config: AppConfig, opts: { gateway: GatewayFetcher; db?: SqlClient; fetch?: typeof fetch; log?: Logger }) {
   const key = await deriveKey(config.credentials.secret, config.credentials.previousSecret)
   const secure = config.credentials.secure
   let store: CredentialStore
@@ -109,7 +110,7 @@ export async function buildApi(config: AppConfig, opts: { db?: SqlClient; fetch?
   } else {
     store = createCookieStore(key, { secure })
   }
-  const gateway = new GatewayClient(config.gatewayUrl, config.internalToken, opts.fetch)
+  const gateway = new GatewayClient(opts.gateway)
   const reader = config.readerUrl ? new ReaderClient(config.readerUrl, config.internalToken, opts.fetch) : null
   return createApi({ service: new AppService(gateway, reader), store, log: opts.log ?? consoleLogger, servers: config.servers })
 }

@@ -13,9 +13,11 @@
   },
   // 自分のドメインへ配信するときは、wrangler.jsonc に routes を足す（ゾーンが同じ Cloudflare アカウントにあること）:
   //   "routes": [{ "pattern": "app.example.com", "custom_domain": true }],
+  // XREAゲートウェイは同じ Worker の Durable Object（アカウントごと）として動く。SQLite 方式は無料枠で使える
+  "durable_objects": { "bindings": [{ "name": "GATEWAY", "class_name": "GatewayTenant" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GatewayTenant"] }],
+  // 秘密は定義に書かず、wrangler secret put で設定する: COOKIE_SECRET（読み取りサービスを使うときは INTERNAL_TOKEN も）
   "vars": {
-    // ゲートウェイのHTTPSのURL（配備時に wrangler.jsonc で設定）
-    "XREA_GATEWAY_URL": "",
     // 空なら Proton Pass 連携を使わない
     "PROTON_READER_URL": "",
     "CREDENTIAL_STORE": "cookie"

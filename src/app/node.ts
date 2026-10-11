@@ -4,6 +4,10 @@ import { serve } from "@hono/node-server"
 import { Hono } from "hono"
 import { createNodeSqliteClient } from "../credentials/sqliteClient"
 import { consoleLogger } from "../shared/logger"
+import { createGatewayApp, type GatewayFetcher } from "../gateway/app"
+import { mxCheck } from "../gateway/domainCheck"
+import { nodeResolver } from "../gateway/nodeResolver"
+import { Registry } from "../gateway/registry"
 import { buildApi } from "./api"
 import { ConfigError, loadAppConfig } from "./config"
 import { staticHandler } from "./static"
@@ -20,7 +24,10 @@ async function main(): Promise<void> {
     throw e
   }
   const db = config.credentials.store === "sqlite" ? createNodeSqliteClient(config.credentials.dbPath) : undefined
-  const api = await buildApi(config, { db })
+  // ゲートウェイは同一プロセスの中で組み立て、ネットワークを介さずに呼び出す
+  const gatewayApp = createGatewayApp({ registry: new Registry(), domainCheck: mxCheck(nodeResolver) })
+  const gateway: GatewayFetcher = async (_x, req) => gatewayApp.fetch(req)
+  const api = await buildApi(config, { db, gateway })
   const app = new Hono()
   app.route("/", api)
   app.get("*", staticHandler())

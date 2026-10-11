@@ -14,7 +14,6 @@ const env: Record<string, string | undefined> = {
   COOKIE_SECURE: "0", // 開発はhttpなので Secure を付けない
   BIND_ADDRESS: "127.0.0.1",
   SESSION_DIR: process.env.SESSION_DIR ?? ".proton-session",
-  XREA_GATEWAY_URL: process.env.XREA_GATEWAY_URL ?? "http://127.0.0.1:8081",
   // Proton Pass連携を使わないときは PROTON_READER_URL= （空）を指定する
   PROTON_READER_URL: process.env.PROTON_READER_URL ?? "http://127.0.0.1:8082",
 }
@@ -43,7 +42,6 @@ async function ensurePassCli(): Promise<void> {
 if (env.PROTON_READER_URL) await ensurePassCli()
 
 const services: { name: string; cmd: string[]; env?: Record<string, string> }[] = [
-  { name: "gateway", cmd: ["tsx", "watch", "src/gateway/main.ts"], env: { PORT: "8081" } },
   { name: "app", cmd: ["tsx", "watch", "src/app/node.ts"], env: { PORT: "3000" } },
   { name: "web", cmd: ["vite", "--host", "0.0.0.0", "--port", "5173", "--strictPort"] },
 ]

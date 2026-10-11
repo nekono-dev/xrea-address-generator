@@ -1,32 +1,35 @@
-import { describe, expect, test } from "vitest"
+import { readdirSync, readFileSync } from "node:fs"
+import { describe, expect, test, vi } from "vitest"
 import { createGatewayApp } from "../../src/gateway/app"
-import { ConfigError, loadGatewayConfig } from "../../src/gateway/config"
 import { ListCache } from "../../src/gateway/listCache"
 import { Mutex } from "../../src/gateway/mutex"
 import { Registry } from "../../src/gateway/registry"
+import { AppError } from "../../src/shared/errors"
 import { silentLogger } from "../../src/shared/logger"
 import { XreaError } from "../../src/xrea/errors"
 import { FakeXrea, sampleMails } from "./fakes"
 
-const TOKEN = "t".repeat(32)
-const H = { authorization: `Bearer ${TOKEN}`, "x-xrea-account": "acct", "x-xrea-server": "s1.xrea.com", "x-xrea-secret": "XREA-SECRET-KEY" }
+const H = { "x-xrea-account": "acct", "x-xrea-server": "s1.xrea.com", "x-xrea-secret": "XREA-SECRET-KEY" }
 const JSON_H = { ...H, "content-type": "application/json" }
 
 function setup(xrea = new FakeXrea(sampleMails()), logger = silentLogger, now: () => number = Date.now) {
   const registry = new Registry(100, 600_000, now, () => xrea)
-  return { xrea, registry, app: createGatewayApp({ registry, internalToken: TOKEN, logger }) }
+  return { xrea, registry, app: createGatewayApp({ registry, logger, domainCheck: noDomain }) }
 }
 
-describe("認証と死活確認", () => {
-  test("xrea-gateway/AC-7: 共有シークレットが誤り、または認証情報の項目が欠けた要求が401になり、XREAは呼ばれない", async () => {
+const noDomain = async () => {
+  throw new AppError("validation_error", "テストではMXを確認しません")
+}
+
+describe("認証情報の検査と組み込み", () => {
+  test("xrea-gateway/AC-7: 認証情報の項目が1つでも欠けた要求が401になり、XREAは呼ばれない", async () => {
     const { app, xrea } = setup()
     const bad: Record<string, string>[] = [
       {},
-      { ...H, authorization: "Bearer wrong" },
-      { ...H, authorization: `Bearer ${TOKEN}x` },
-      { ...H, authorization: TOKEN },
       { ...H, "x-xrea-secret": "" },
-      { authorization: `Bearer ${TOKEN}`, "x-xrea-account": "a", "x-xrea-server": "s" },
+      { ...H, "x-xrea-account": "" },
+      { ...H, "x-xrea-server": "" },
+      { "x-xrea-account": "a", "x-xrea-server": "s" },
     ]
     for (const headers of bad) {
       const res = await app.request("/v1/aliases", { headers })
@@ -36,19 +39,18 @@ describe("認証と死活確認", () => {
     expect(xrea.calls).toEqual([])
   })
 
-  test("xrea-gateway/AC-11: 共有シークレットなしの死活確認が200になる", async () => {
+  test("xrea-gateway/AC-11: ゲートウェイの呼び出しがfetchを使わず、待ち受けのコードを持たない", async () => {
     const { app } = setup()
-    const res = await app.request("/healthz")
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ ok: true })
-    expect((await app.request("/health")).status).toBe(200)
-  })
-
-  test("INTERNAL_TOKEN が未設定または短いと、変数名を示して失敗する", () => {
-    expect(() => loadGatewayConfig({})).toThrow(ConfigError)
-    expect(() => loadGatewayConfig({ INTERNAL_TOKEN: "x".repeat(31) })).toThrow(/INTERNAL_TOKEN/)
-    expect(loadGatewayConfig({ INTERNAL_TOKEN: TOKEN })).toMatchObject({ port: 8081, bindAddress: "0.0.0.0", logLevel: "info" })
-    expect(() => loadGatewayConfig({ INTERNAL_TOKEN: TOKEN, PORT: "0" })).toThrow(ConfigError)
+    const f = vi.spyOn(globalThis, "fetch")
+    expect((await app.request("/v1/aliases", { headers: H })).status).toBe(200)
+    expect(f).not.toHaveBeenCalled()
+    f.mockRestore()
+    // ゲートウェイの実装にポートを開く部品が含まれない（待ち受けはアプリの入口だけが持つ）
+    const dir = new URL("../../src/gateway/", import.meta.url)
+    for (const file of readdirSync(dir)) {
+      const text = readFileSync(new URL(file, dir), "utf8")
+      expect(text, file).not.toMatch(/node-server|\.listen\(|serve\(/)
+    }
   })
 
   test("XREAのエラーは、メッセージ付きなら 424、送信間隔の超過なら 429 になる（5xx は Cloudflare に本文を置き換えられるため使わない）", async () => {
@@ -86,7 +88,7 @@ describe("秘匿情報", () => {
     out.push(await (await app.request("/v1/aliases", { headers: H })).text())
     out.push(await (await app.request("/v1/aliases", { method: "POST", headers: JSON_H, body: JSON.stringify({ name: "new", domain: "example.com", forwardTo: "me@mail.example" }) })).text())
     out.push(await (await app.request("/v1/aliases", { method: "POST", headers: JSON_H, body: JSON.stringify({ name: "shop", domain: "example.com", forwardTo: "me@mail.example" }) })).text())
-    out.push(await (await app.request("/v1/aliases", { headers: { ...H, authorization: "Bearer bad" } })).text())
+    out.push(await (await app.request("/v1/aliases", { headers: { ...H, "x-xrea-secret": "" } })).text())
     const all = [...out, ...lines].join("\n")
     expect(all).not.toContain("XREA-POP-PASSWORD")
     expect(all).not.toContain("pop_pass")
@@ -131,7 +133,7 @@ describe("アカウントごとのキャッシュ・排他・保持", () => {
     xreas.a.delayMs = 50
     xreas.b.delayMs = 50
     const registry = new Registry(100, 600_000, Date.now, c => (c.account === "a" ? xreas.a : xreas.b))
-    const app = createGatewayApp({ registry, internalToken: TOKEN, logger: silentLogger })
+    const app = createGatewayApp({ registry, logger: silentLogger, domainCheck: noDomain })
     const post = (account: string, name: string) =>
       app.request("/v1/aliases", { method: "POST", headers: { ...JSON_H, "x-xrea-account": account }, body: JSON.stringify({ name, domain: "example.com", forwardTo: "me@mail.example" }) })
     const rs = await Promise.all([post("a", "first"), post("a", "second"), post("b", "other")])
@@ -144,22 +146,22 @@ describe("アカウントごとのキャッシュ・排他・保持", () => {
     expect(bEnd).toBeLessThan(aEnd)
   })
 
-  test("xrea-gateway/AC-10: 101個目で最も古く使われたクライアントが破棄され、10分後に使われていないクライアントが破棄される", () => {
+  test("xrea-gateway/AC-10: 101個目で最も古く使われたクライアントが破棄され、10分後に使われていないクライアントが破棄される", async () => {
     let t = 0
     const made: string[] = []
     const reg = new Registry(100, 600_000, () => t, c => (made.push(c.account), new FakeXrea([])))
     const creds = (i: number) => ({ account: `a${i}`, serverName: "s", apiSecretKey: "k" })
-    for (let i = 0; i < 100; i++) reg.get(creds(i))
+    for (let i = 0; i < 100; i++) await reg.get(creds(i))
     expect(reg.size).toBe(100)
-    reg.get(creds(0)) // a0 を最近使ったことにする
-    reg.get(creds(100))
+    await reg.get(creds(0)) // a0 を最近使ったことにする
+    await reg.get(creds(100))
     expect(reg.size).toBe(100)
-    reg.get(creds(0))
+    await reg.get(creds(0))
     expect(made).toHaveLength(101) // a0 は破棄されていない
-    reg.get(creds(1))
+    await reg.get(creds(1))
     expect(made).toHaveLength(102) // a1 が最も古く、破棄されていた
     t = 600_001
-    reg.get(creds(2)) // 他のものは10分を過ぎて破棄される
+    await reg.get(creds(2)) // 他のものは10分を過ぎて破棄される
     expect(reg.size).toBe(1)
   })
 

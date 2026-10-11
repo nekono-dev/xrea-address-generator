@@ -42,7 +42,6 @@ describe("クラウドの一括撤去", () => {
     destroy(base, f.runner)
     const order = [
       "wrangler delete",
-      "services delete xrea-gateway",
       "services delete proton-reader",
       "repositories delete xrea",
       "secrets delete xrea-internal-token",
@@ -56,6 +55,18 @@ describe("クラウドの一括撤去", () => {
     const f = fake([])
     destroy(base, f.runner)
     expect(f.execs).toEqual([])
+  })
+
+  test("cloud-deploy/AC-18: PROJECT_ID が無いときは Workers だけを撤去し、Google Cloud に触れない", () => {
+    const calls: string[] = []
+    const runner: Runner = {
+      query: (c) => (calls.push([c.cmd, ...c.args].join(" ")), { code: 0, stdout: "" }),
+      exec: (c) => (calls.push([c.cmd, ...c.args].join(" ")), { code: 0, stdout: "" }),
+      log: () => {},
+    }
+    destroy({ ...base, projectId: "" }, runner)
+    expect(calls.some((k) => k.startsWith("gcloud"))).toBe(false)
+    expect(calls.some((k) => k.includes("wrangler delete"))).toBe(true)
   })
 
   test("cloud-deploy/AC-18: 一部だけ存在するときは、存在するものだけを削除する", () => {
@@ -72,9 +83,9 @@ describe("クラウドの一括撤去", () => {
       dryRun: false,
       wranglerConfig: "wrangler.template.jsonc",
     })
-    expect(() => loadDestroyConfig({ CLOUDFLARE_ACCOUNT_ID: "a" }, [])).toThrow(
-      "PROJECT_ID",
-    )
+    // PROJECT_ID が無いときは Google Cloud を撤去しない
+    expect(loadDestroyConfig({ CLOUDFLARE_ACCOUNT_ID: "a" }, [], () => false).projectId).toBe("")
+    expect(() => loadDestroyConfig({ PROJECT_ID: "p" }, [])).toThrow("CLOUDFLARE_ACCOUNT_ID")
     expect(() => loadDestroyConfig(env, ["--force"])).toThrow("--force")
   })
 })

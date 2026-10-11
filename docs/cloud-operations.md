@@ -70,16 +70,16 @@ XREA の API シークレットキーが漏れた可能性があるときは、X
 
 | サービス       | 最大インスタンス数 | 理由                                                                                                   |
 | -------------- | ------------------ | ------------------------------------------------------------------------------------------------------ |
-| xrea-gateway   | 1                  | XREA の API への要求を直列化する。2以上にすると、同じアカウントへの要求が並列になる                    |
+| ゲートウェイ（Durable Object） | 制約なし | アカウントごとに1つの Durable Object が要求を直列化する。台数ではなく、アカウントごとの実体の一意性が直列化を守る |
 | proton-reader  | 1                  | Proton Pass のセッションをファイルで保持し、複数のインスタンスで同時にログインしない                   |
 | app（Workers） | 指定しない         | 状態を持たないため、Workers が増減させる。認証情報は cookie にあり、インスタンスの間で共有しなくてよい |
 
-Cloud Run では `--max-instances 1` を指定します。proton-reader は再作成でセッションを失っても、次の要求で自動的に再ログインします。
+Cloud Run では proton-reader に `--max-instances 1` を指定します。proton-reader は再作成でセッションを失っても、次の要求で自動的に再ログインします。
 
 ## 6. 運用の確認
 
 秘密値を更新したあとや、再デプロイのあとに、疎通確認を実行します。
 
 ```sh
-npx tsx scripts/cloud/check.ts probe --app https://app.example.net --gateway "$GATEWAY_URL"
+npx tsx scripts/cloud/check.ts probe --app https://app.example.net
 ```

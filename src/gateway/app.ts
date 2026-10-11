@@ -1,8 +1,8 @@
 // ルーティング、共有シークレットの検査、エラー応答。
 import { Hono, type Context } from "hono"
 import { AppError, STATUS, errorBody } from "../shared/errors"
-import { internalAuth } from "../shared/internalAuth"
 import { consoleLogger, type Logger } from "../shared/logger"
+import type { XreaConfig } from "../xrea/client"
 import { XreaError } from "../xrea/errors"
 import type { DomainCheck } from "./domainCheck"
 import type { Registry } from "./registry"
@@ -21,7 +21,10 @@ function toAppError(e: unknown): AppError | null {
   return null
 }
 
-export function createGatewayApp(opts: { registry: Registry; internalToken: string; logger?: Logger; words?: readonly string[]; rnd?: () => number; domainCheck?: DomainCheck }) {
+/** ゲートウェイの呼び出し先。Node.js は同一プロセスのアプリ、Workers はアカウントごとの Durable Object */
+export type GatewayFetcher = (x: XreaConfig, req: Request) => Promise<Response>
+
+export function createGatewayApp(opts: { registry: Registry; logger?: Logger; words?: readonly string[]; rnd?: () => number; domainCheck: DomainCheck }) {
   const log = opts.logger ?? consoleLogger
   const app = new Hono()
 
@@ -42,14 +45,7 @@ export function createGatewayApp(opts: { registry: Registry; internalToken: stri
     return c.json(errorBody("internal_error", "サーバでエラーが発生しました"), 500)
   })
 
-  // Cloud Run は z で終わるパス（/healthz）を予約しているため、/health も同じ応答にする
-  app.get("/healthz", c => c.json({ ok: true }))
-  app.get("/health", c => c.json({ ok: true }))
-
-  const auth = internalAuth(opts.internalToken)
-  app.use("/v1/*", auth)
-
-  const tenantOf = (c: Context) => {
+  const tenantOf = async (c: Context) => {
     const account = c.req.header("x-xrea-account")
     const serverName = c.req.header("x-xrea-server")
     const apiSecretKey = c.req.header("x-xrea-secret")
@@ -67,13 +63,13 @@ export function createGatewayApp(opts: { registry: Registry; internalToken: stri
   }
 
   app.get("/v1/aliases", async c => {
-    const aliases = await svc.listAliases(tenantOf(c))
+    const aliases = await svc.listAliases(await tenantOf(c))
     log.info({ route: "GET /v1/aliases", count: aliases.length })
     return c.json({ aliases })
   })
 
   app.post("/v1/aliases", async c => {
-    const t = tenantOf(c)
+    const t = await tenantOf(c)
     const b = await readJson(c)
     const alias = await svc.createAlias(
       t,
@@ -88,22 +84,22 @@ export function createGatewayApp(opts: { registry: Registry; internalToken: stri
   })
 
   app.patch("/v1/aliases/:address", async c => {
-    const t = tenantOf(c)
+    const t = await tenantOf(c)
     const b = await readJson(c)
     const alias = await svc.changeForward(t, c.req.param("address"), typeof b.forwardTo === "string" ? b.forwardTo : "")
     return c.json({ alias })
   })
 
   app.delete("/v1/aliases/:address/forward", async c => {
-    return c.json({ alias: await svc.removeForward(tenantOf(c), c.req.param("address")) })
+    return c.json({ alias: await svc.removeForward(await tenantOf(c), c.req.param("address")) })
   })
 
   app.delete("/v1/aliases/:address", async c => {
-    await svc.deleteAlias(tenantOf(c), c.req.param("address"))
+    await svc.deleteAlias(await tenantOf(c), c.req.param("address"))
     return c.body(null, 204)
   })
 
-  app.get("/v1/options", async c => c.json(await svc.options(tenantOf(c))))
+  app.get("/v1/options", async c => c.json(await svc.options(await tenantOf(c))))
 
   app.all("/v1/*", c => c.json(errorBody("not_found", "APIが見つかりません"), 404))
 

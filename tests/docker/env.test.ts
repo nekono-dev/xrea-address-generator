@@ -3,6 +3,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, test } from "vitest"
+import { loadAppConfig } from "../../src/app/config"
 
 const root = path.resolve(__dirname, "../..")
 const read = (f: string) => fs.readFileSync(path.join(root, f), "utf8")
@@ -24,10 +25,10 @@ describe("環境変数の記入例", () => {
   test("docker-deploy/AC-5: 記入例が必須の環境変数をすべて含み、任意の環境変数も空の値で並ぶ", () => {
     const example = read(".env.example")
     const names = keys(example)
-    for (const k of ["COOKIE_SECRET", "INTERNAL_TOKEN"]) expect(names).toContain(k)
-    for (const k of ["CREDENTIAL_STORE", "COMPOSE_PROFILES", "PROTON_READER_URL", "TUNNEL_TOKEN", "LOG_LEVEL", "APP_PORT", "XREA_SERVERS_CONFIG"]) expect(example).toMatch(new RegExp(`^${k}=$`, "m"))
+    for (const k of ["COOKIE_SECRET"]) expect(names).toContain(k)
+    for (const k of ["INTERNAL_TOKEN", "CREDENTIAL_STORE", "COMPOSE_PROFILES", "PROTON_READER_URL", "TUNNEL_TOKEN", "LOG_LEVEL", "APP_PORT", "XREA_SERVERS_CONFIG"]) expect(example).toMatch(new RegExp(`^${k}=$`, "m"))
     // 旧方式の変数を残さない
-    for (const k of ["XREA_ACCOUNT", "XREA_API_SECRET_KEY", "PROTON_PASS_PERSONAL_ACCESS_TOKEN"]) expect(names).not.toContain(k)
+    for (const k of ["XREA_ACCOUNT", "XREA_API_SECRET_KEY", "PROTON_PASS_PERSONAL_ACCESS_TOKEN", "XREA_GATEWAY_URL"]) expect(names).not.toContain(k)
   })
 
   test("記入例に秘匿値を書き込まず、実際の値を入れたファイルをイメージとリポジトリに含めない", () => {
@@ -57,26 +58,25 @@ describe("Composeの定義", () => {
   test("docker-deploy/AC-2: 読み取りサービスは proton のプロファイルを選んだときだけ起動する", () => {
     expect(read("compose.yaml")).toMatch(/proton-reader:[\s\S]*?profiles: \[proton\]/)
     if (!hasCompose) return
-    expect(Object.keys(composeConfig(SECRETS).json.services).sort()).toEqual(["app", "cloudflared", "xrea-gateway"])
-    expect(Object.keys(composeConfig({ ...SECRETS, COMPOSE_PROFILES: "proton" }).json.services).sort()).toEqual(["app", "cloudflared", "proton-reader", "xrea-gateway"])
+    expect(Object.keys(composeConfig(SECRETS).json.services).sort()).toEqual(["app", "cloudflared"])
+    expect(Object.keys(composeConfig({ ...SECRETS, COMPOSE_PROFILES: "proton" }).json.services).sort()).toEqual(["app", "cloudflared", "proton-reader"])
   })
 
-  test("docker-deploy/AC-10: 秘密値または共有シークレットが空のとき、Composeの起動が変数名を示して失敗する", () => {
+  test("docker-deploy/AC-10: 秘密値が空のときComposeの起動が変数名を示して失敗し、読み取りサービスを選んで共有シークレットが空のときアプリが変数名を示して失敗する", () => {
     expect(read("compose.yaml")).toMatch(/\$\{COOKIE_SECRET:\?[^}]+\}/)
-    expect(read("compose.yaml")).toMatch(/\$\{INTERNAL_TOKEN:\?[^}]+\}/)
+    // 共有シークレットは読み取りサービスを使うときだけ必須で、不足はアプリの設定の読み込みが拒否する
+    expect(() => loadAppConfig({ COOKIE_SECRET: "a".repeat(40), PROTON_READER_URL: "http://proton-reader:8082" })).toThrow("INTERNAL_TOKEN")
+    expect(() => loadAppConfig({ COOKIE_SECRET: "a".repeat(40) })).not.toThrow()
     if (!hasCompose) return
     const a = composeConfig({ ...SECRETS, COOKIE_SECRET: "" })
     expect(a.ok).toBe(false)
     expect(a.stderr).toContain("COOKIE_SECRET")
-    const b = composeConfig({ ...SECRETS, INTERNAL_TOKEN: "" })
-    expect(b.ok).toBe(false)
-    expect(b.stderr).toContain("INTERNAL_TOKEN")
   })
 
   test("docker-deploy/AC-9: LAN用の追加定義がアプリのポートだけを公開し、cookieの Secure を外す", () => {
     const lan = read("compose.lan.yaml")
     expect(lan).toMatch(/^\s+ports:\n\s+- \$\{APP_PORT:-3000\}:3000$/m)
-    expect(lan).not.toMatch(/xrea-gateway|proton-reader|cloudflared/)
+    expect(lan).not.toMatch(/proton-reader|cloudflared/)
     if (!hasCompose) return
     const c = composeConfig(SECRETS, ["compose.yaml", "compose.lan.yaml"])
     expect(c.ok, c.stderr).toBe(true)
@@ -91,10 +91,10 @@ describe("Composeの定義", () => {
     expect(c.json.services.app.environment.COOKIE_SECURE).toBe("1")
   })
 
-  test("docker-deploy/AC-11: ゲートウェイと読み取りサービスに、読み取り専用のルート・権限の放棄・一時領域を設定する", () => {
+  test("docker-deploy/AC-11: アプリと読み取りサービスに、読み取り専用のルート・権限の放棄・一時領域を設定する", () => {
     if (!hasCompose) return
     const c = composeConfig({ ...SECRETS, COMPOSE_PROFILES: "proton" })
-    for (const name of ["xrea-gateway", "proton-reader"]) {
+    for (const name of ["app", "proton-reader"]) {
       const s = c.json.services[name]
       expect(s.read_only, name).toBe(true)
       expect(s.cap_drop, name).toEqual(["ALL"])
@@ -106,7 +106,7 @@ describe("Composeの定義", () => {
   test("docker-deploy/AC-8: 各サービスに死活確認と自動再起動が設定される", () => {
     if (!hasCompose) return
     const c = composeConfig({ ...SECRETS, COMPOSE_PROFILES: "proton" })
-    for (const name of ["app", "xrea-gateway", "proton-reader"]) {
+    for (const name of ["app", "proton-reader"]) {
       const s = c.json.services[name]
       expect(s.restart, name).toBe("unless-stopped")
       expect(s.healthcheck.retries, name).toBe(3)
@@ -114,10 +114,10 @@ describe("Composeの定義", () => {
     }
   })
 
-  test("ゲートウェイと読み取りサービスには、アプリの秘密値を渡さない", () => {
+  test("読み取りサービスには、アプリの秘密値を渡さない", () => {
     if (!hasCompose) return
     const c = composeConfig({ ...SECRETS, COMPOSE_PROFILES: "proton" })
-    for (const name of ["xrea-gateway", "proton-reader"]) expect(Object.keys(c.json.services[name].environment)).not.toContain("COOKIE_SECRET")
+    expect(Object.keys(c.json.services["proton-reader"].environment)).not.toContain("COOKIE_SECRET")
     expect(execFileSync("git", ["check-ignore", ".env"], { cwd: root, encoding: "utf8" }).trim()).toBe(".env")
   })
 })

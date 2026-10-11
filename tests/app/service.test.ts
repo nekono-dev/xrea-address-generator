@@ -66,7 +66,7 @@ describe("ゲートウェイへの中継", () => {
     expect([res.status, (await res.json()).error.code]).toEqual([400, "validation_error"])
   })
 
-  test("alias-service/AC-8: 共有シークレットが付き、認証情報とトークンは要求ヘッダにだけ現れ、URLと本文には現れない", async () => {
+  test("alias-service/AC-8: 読み取りサービスに共有シークレットが付き、認証情報とトークンは要求ヘッダにだけ現れ、URLと本文には現れない", async () => {
     const { app, register, seen, json } = await makeApp()
     const cookie = await register()
     await get(app, "/api/aliases", cookie)
@@ -74,8 +74,8 @@ describe("ゲートウェイへの中継", () => {
     await app.request("/api/proton/refresh", { method: "POST", headers: { cookie } })
     expect(seen.gateway.length).toBeGreaterThan(1)
     expect(seen.reader.length).toBeGreaterThan(0)
+    for (const s of seen.reader) expect(s.headers.authorization).toBe("Bearer " + ENV.INTERNAL_TOKEN)
     for (const s of [...seen.gateway, ...seen.reader]) {
-      expect(s.headers.authorization).toBe("Bearer " + ENV.INTERNAL_TOKEN)
       expect(s.url).not.toContain("XREA-SECRET-KEY")
       expect(s.url).not.toContain("PROTON-PAT-VALUE")
       expect(s.body).not.toContain("XREA-SECRET-KEY")
@@ -101,18 +101,18 @@ describe("ゲートウェイへの中継", () => {
     const brokenFetch = (async () => {
       throw new Error("ECONNREFUSED")
     }) as unknown as typeof fetch
-    const client = new GatewayClient("http://gateway.test", ENV.INTERNAL_TOKEN, brokenFetch)
+    const client = new GatewayClient(brokenFetch as never)
     await expect(client.list(XREA)).rejects.toMatchObject({ code: "upstream_error", message: "XREAゲートウェイへ接続できません" })
-    // 共有シークレットの不一致は、利用者の認証情報の問題と区別して 502 にする
-    const wrong = new GatewayClient("http://gateway.test", "w".repeat(32), (await makeApp()).fetch)
-    await expect(wrong.list(XREA)).rejects.toMatchObject({ code: "upstream_error", message: "内部サービスの認証に失敗しました" })
+    // ゲートウェイの unauthorized は、利用者の認証情報の問題と区別して 502 にする
+    const denied = new GatewayClient(async () => Response.json({ error: { code: "unauthorized", message: "x" } }, { status: 401 }))
+    await expect(denied.list(XREA)).rejects.toMatchObject({ code: "upstream_error", message: "内部サービスの認証に失敗しました" })
   })
 
   test("alias-service/AC-18: ゲートウェイが応答しない状態で、10秒時点で502が返る", async () => {
     vi.useFakeTimers()
     try {
-      const never = ((_u: string, init: RequestInit) => new Promise((_r, rej) => init.signal!.addEventListener("abort", () => rej(new Error("aborted"))))) as unknown as typeof fetch
-      const client = new GatewayClient("http://gateway.test", ENV.INTERNAL_TOKEN, never)
+      const never = (() => new Promise<Response>(() => {})) as never
+      const client = new GatewayClient(never)
       const p = client.list(XREA).then(() => "ok", e => e)
       await vi.advanceTimersByTimeAsync(9_999)
       let settled = false

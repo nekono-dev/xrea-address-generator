@@ -98,7 +98,7 @@ describe.runIf(live)("compose", () => {
     listenBefore = listenSet()
     const t0 = Date.now()
     compose("up -d --no-build")
-    await waitHealthy(["app", "xrea-gateway"], 60_000)
+    await waitHealthy(["app"], 60_000)
     startupMs = Date.now() - t0 // up の開始から死活確認の成功まで
   }, 900_000)
   afterAll(() => {
@@ -110,8 +110,8 @@ describe.runIf(live)("compose", () => {
     expect(startupMs).toBeLessThanOrEqual(30_000)
   })
 
-  test("docker-deploy/AC-2: 読み取りサービスを選ばない起動で、アプリ・ゲートウェイ・Cloudflare Tunnelの3コンテナが稼働する", () => {
-    expect(compose("ps -a --format '{{.Service}}'").split("\n").sort()).toEqual(["app", "cloudflared", "xrea-gateway"])
+  test("docker-deploy/AC-2: 読み取りサービスを選ばない起動で、アプリとCloudflare Tunnelの2コンテナが稼働する", () => {
+    expect(compose("ps -a --format '{{.Service}}'").split("\n").sort()).toEqual(["app", "cloudflared"])
   })
 
   test("docker-deploy/AC-7: ホストの外部アドレスからアプリのポートへ接続できず、同じネットワークからは接続できる", () => {
@@ -121,35 +121,27 @@ describe.runIf(live)("compose", () => {
     expect(JSON.parse(out)).toEqual({ ok: true })
   }, 120_000)
 
-  test("docker-deploy/AC-6: ホストの外部アドレスからゲートウェイのポートへ接続できず、アプリのコンテナからは接続できる", () => {
-    expect(sh("curl -s -m 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/healthz", { allowFail: true })).not.toBe("200")
-    expect(JSON.parse(inApp(`fetch("http://xrea-gateway:8081/healthz").then(r=>r.text()).then(t=>console.log(t))`))).toEqual({ ok: true })
-    // 共有シークレットなしの /v1 は拒否される
-    expect(inApp(`fetch("http://xrea-gateway:8081/v1/aliases").then(r=>console.log(r.status))`)).toBe("401")
-  })
-
   test("docker-deploy/AC-16: 稼働中のホストで、アプリに由来する待ち受けポートが0個である", () => {
-    for (const s of ["app", "xrea-gateway"]) {
-      const ports = JSON.parse(sh(`${DOCKER} inspect -f '{{json .NetworkSettings.Ports}}' ${cid(s)}`)) as Record<string, unknown[] | null>
-      expect(Object.values(ports).every(v => v === null || v.length === 0), s).toBe(true)
-    }
+    const ports = JSON.parse(sh(`${DOCKER} inspect -f '{{json .NetworkSettings.Ports}}' ${cid("app")}`)) as Record<string, unknown[] | null>
+    expect(Object.values(ports).every(v => v === null || v.length === 0)).toBe(true)
     // 検証サーバには別の検証の待ち受けがあるため、Compose の起動前後で増えた待ち受けが無いことを確かめる
     expect([...listenSet()].filter(a => !listenBefore.has(a))).toEqual([])
   })
 
-  test("docker-deploy/AC-11: ゲートウェイが非特権ユーザーで動き、ルートファイルシステムへの書き込みが失敗する", () => {
-    const g = cid("xrea-gateway")
+  test("docker-deploy/AC-11: アプリが非特権ユーザーで動き、ボリューム以外のルートファイルシステムへの書き込みが失敗する", () => {
+    const g = cid("app")
     expect(sh(`${DOCKER} exec ${g} id -u`)).not.toBe("0")
     expect(sh(`${DOCKER} exec ${g} sh -c 'touch /should-fail 2>&1 || echo denied'`)).toContain("denied")
     expect(sh(`${DOCKER} exec ${g} sh -c 'touch /tmp/ok && echo ok'`)).toBe("ok")
+    expect(sh(`${DOCKER} exec ${g} sh -c 'touch /var/lib/xrea-address-generator/data/ok && echo ok'`)).toBe("ok")
     const cfg = JSON.parse(sh(`${DOCKER} inspect -f '{{json .HostConfig}}' ${g}`))
     expect(cfg.ReadonlyRootfs).toBe(true)
     expect(cfg.CapDrop).toEqual(["ALL"])
     expect(cfg.SecurityOpt).toContain("no-new-privileges:true")
   })
 
-  test("docker-deploy/AC-8: アプリとゲートウェイのプロセスを強制終了すると、自動で再起動して死活確認が成功する", async () => {
-    for (const s of ["app", "xrea-gateway"]) {
+  test("docker-deploy/AC-8: アプリのプロセスを強制終了すると、自動で再起動して死活確認が成功する", async () => {
+    for (const s of ["app"]) {
       const before = Number(sh(`${DOCKER} inspect -f '{{.RestartCount}}' ${cid(s)}`))
       killMain(s)
       await sleep(2000)
@@ -173,7 +165,7 @@ describe.runIf(live)("compose", () => {
 
   test.runIf(hasXrea)("docker-deploy/AC-12: 環境変数ファイルにSecure属性を外す指定があっても、トンネルを使う構成のアプリが Secure 付きのcookieを発行する", () => {
     const r = JSON.parse(inApp(registerJs(true)))
-    expect(r.status).toBe(204)
+    expect([200, 204]).toContain(r.status) // Proton Pass のトークンを添えると、連携の状態を本文に返して200になる
     expect(r.cookie).toContain("; Secure")
     expect(r.cookie).toContain("HttpOnly")
   }, 60_000)
@@ -185,24 +177,24 @@ describe.runIf(live)("compose (LAN)", () => {
     writeEnv({ TUNNEL_TOKEN: "", APP_PORT: String(LAN_PORT) })
     compose("down -v", `${files} --profile proton`, true)
     compose("up -d --no-build", files)
-    await waitHealthy(["app", "xrea-gateway"], 60_000)
+    await waitHealthy(["app"], 60_000)
   }, 600_000)
   afterAll(() => {
     compose("down -v", `${files} --profile proton`, true)
   }, 120_000)
 
   test("docker-deploy/AC-3: トンネルのトークンが空の起動で、Cloudflare Tunnelのコンテナが0個になる", () => {
-    expect(compose("ps -a --format '{{.Service}}'", files).split("\n").sort()).toEqual(["app", "xrea-gateway"])
+    expect(compose("ps -a --format '{{.Service}}'", files).split("\n").sort()).toEqual(["app"])
   })
 
   test("docker-deploy/AC-9: LAN用の追加定義でアプリのポートだけが公開され、HTTPの接続でcookieが保持される", () => {
     expect(sh(`curl -s -m 3 http://127.0.0.1:${LAN_PORT}/healthz`)).toBe('{"ok":true}')
-    expect(sh("curl -s -m 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/healthz", { allowFail: true })).not.toBe("200")
-    const ports = JSON.parse(sh(`${DOCKER} inspect -f '{{json .NetworkSettings.Ports}}' ${cid("xrea-gateway")}`)) as Record<string, unknown[] | null>
-    expect(Object.values(ports).every(v => v === null || v.length === 0)).toBe(true)
+    // アプリのポート以外は公開しない
+    const ports = JSON.parse(sh(`${DOCKER} inspect -f '{{json .NetworkSettings.Ports}}' ${cid("app")}`)) as Record<string, { HostPort: string }[] | null>
+    expect(Object.entries(ports).filter(([, v]) => v && v.length > 0).map(([k]) => k)).toEqual(["3000/tcp"])
     if (!hasXrea) return
     const r = JSON.parse(inApp(registerJs(false)))
-    expect(r.status).toBe(204)
+    expect([200, 204]).toContain(r.status)
     expect(r.cookie).not.toContain("Secure") // HTTPでもブラウザが保持できる
   }, 60_000)
 })
@@ -215,14 +207,21 @@ describe.runIf(live && hasProton)("proton", () => {
     writeEnv({ COMPOSE_PROFILES: "proton", PROTON_READER_URL: "http://proton-reader:8082" })
     compose("down -v", `${files} --profile proton`, true)
     compose("up -d --no-build", files)
-    await waitHealthy(["app", "xrea-gateway", "proton-reader"], 90_000)
+    await waitHealthy(["app", "proton-reader"], 90_000)
   }, 900_000)
   afterAll(() => {
     compose("down -v", `${files} --profile proton`, true)
   }, 120_000)
 
+  test("docker-deploy/AC-6: ホストの外部アドレスから読み取りサービスのポートへ接続できず、アプリのコンテナからは接続できる", () => {
+    expect(sh("curl -s -m 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:8082/healthz", { allowFail: true })).not.toBe("200")
+    expect(JSON.parse(inApp(`fetch("http://proton-reader:8082/healthz").then(r=>r.text()).then(t=>console.log(t))`))).toEqual({ ok: true })
+    // 共有シークレットなしの /v1 は拒否される
+    expect(inApp(`fetch("http://proton-reader:8082/v1/entries").then(r=>console.log(r.status))`)).toBe("401")
+  })
+
   test.runIf(hasXrea)("docker-deploy/AC-4: 読み取りサービスのコンテナを作り直した後も、Proton Passのセッションが保持され、再ログインなしで取得できる", async () => {
-    expect(compose("ps -a --format '{{.Service}}'", files).split("\n").sort()).toEqual(["app", "cloudflared", "proton-reader", "xrea-gateway"])
+    expect(compose("ps -a --format '{{.Service}}'", files).split("\n").sort()).toEqual(["app", "cloudflared", "proton-reader"])
     const r = JSON.parse(inApp(registerJs(true)))
     expect(r.status).toBe(204)
     cookie = r.cookie.split(";")[0]

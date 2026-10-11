@@ -7,7 +7,7 @@ import { loadServers } from "./servers"
 export { ConfigError }
 
 export type AppConfig = {
-  gatewayUrl: string
+  /** 読み取りサービスを使うときだけ必須。使わないときは空 */
   internalToken: string
   /** 未設定ならProton Pass連携を使わない */
   readerUrl: string | null
@@ -41,17 +41,16 @@ function url(env: Record<string, string | undefined>, name: string, required: bo
 export function loadAppConfig(env: Record<string, string | undefined>, opts: { allowSqlite?: boolean; httpPolicy?: HttpPolicy; readFile?: (path: string) => string } = {}): AppConfig {
   const allowSqlite = opts.allowSqlite ?? true
   const policy = opts.httpPolicy ?? "external"
-  const gatewayUrl = url(env, "XREA_GATEWAY_URL", true, policy)!
+  const readerUrl = url(env, "PROTON_READER_URL", false, policy)
   const internalToken = env.INTERNAL_TOKEN ?? ""
-  if (internalToken.length < MIN_TOKEN_LENGTH) throw new ConfigError(`INTERNAL_TOKEN は${MIN_TOKEN_LENGTH}文字以上で設定してください`)
+  if (readerUrl && internalToken.length < MIN_TOKEN_LENGTH) throw new ConfigError(`INTERNAL_TOKEN は${MIN_TOKEN_LENGTH}文字以上で設定してください`)
   const credentials = loadCredentialConfig(env)
   if (credentials.store === "sqlite" && !allowSqlite) throw new ConfigError("この実行環境では CREDENTIAL_STORE=sqlite を使えません")
   const port = Number(env.PORT || 3000)
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new ConfigError(`PORT が不正です: ${env.PORT}`)
   return {
-    gatewayUrl,
     internalToken,
-    readerUrl: url(env, "PROTON_READER_URL", false, policy),
+    readerUrl,
     credentials,
     servers: loadServers(env, opts.readFile),
     // トンネルを使わない（TUNNEL_TOKEN が未設定の）ときは、LANから接続できるよう全アドレスで待ち受ける

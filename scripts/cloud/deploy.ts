@@ -1,6 +1,6 @@
-// クラウド配備の一括実行（Cloud Run の xrea-gateway・proton-reader と、Workers の app）。
+// クラウド配備の一括実行（Cloud Run の proton-reader と、Workers の app。XREAゲートウェイは app に内蔵）。
 //   npm run deploy:cloud                  すべてを配備する
-//   npm run deploy:cloud -- --no-reader   proton-reader を配備しない
+//   npm run deploy:cloud -- --no-reader   proton-reader を配備しない（Google Cloud は使わない）
 //   npm run deploy:cloud -- --dry-run     読み取りだけ実行し、変更を伴う操作は表示だけにする
 // 何度実行しても同じ結果になる。イメージのタグは変えず、既存のサービスとイメージを先に削除してから入れ直す。
 // 秘匿値は引数に載せず、標準入力だけで渡す。出力にも含めない。
@@ -35,22 +35,21 @@ export type Runner = {
   log(msg: string): void
 }
 
-export const GATEWAY_SERVICE = "xrea-gateway"
 export const READER_SERVICE = "proton-reader"
-export const GATEWAY_COMMAND = ["--command", "node", "--args", "/app/dist/gateway/main.js"]
 
 export function loadConfig(env: NodeJS.ProcessEnv, argv: string[], exists: (p: string) => boolean = existsSync): DeployConfig {
-  const projectId = env.PROJECT_ID
-  if (!projectId) throw new Error("環境変数 PROJECT_ID（Google Cloud のプロジェクトID）を設定してください")
-  if (!env.CLOUDFLARE_ACCOUNT_ID) throw new Error("環境変数 CLOUDFLARE_ACCOUNT_ID（Cloudflare のアカウントID）を設定してください")
   for (const a of argv) if (!["--no-reader", "--dry-run"].includes(a)) throw new Error(`不明な引数です: ${a}（使えるのは --no-reader、--dry-run）`)
+  const reader = !argv.includes("--no-reader")
+  const projectId = env.PROJECT_ID ?? ""
+  if (reader && !projectId) throw new Error("環境変数 PROJECT_ID（Google Cloud のプロジェクトID）を設定してください（読み取りサービスを配備しないときは不要です）")
+  if (!env.CLOUDFLARE_ACCOUNT_ID) throw new Error("環境変数 CLOUDFLARE_ACCOUNT_ID（Cloudflare のアカウントID）を設定してください")
   return {
     projectId,
     region: env.REGION || "asia-northeast1",
     tag: env.IMAGE_TAG || "v1",
     repo: "xrea",
     secret: "xrea-internal-token",
-    reader: !argv.includes("--no-reader"),
+    reader,
     dryRun: argv.includes("--dry-run"),
     appUrl: env.APP_URL || undefined,
     wranglerConfig: exists("wrangler.jsonc") ? "wrangler.jsonc" : "wrangler.template.jsonc",
@@ -144,14 +143,16 @@ function secretNames(c: DeployConfig, r: Runner): string[] {
   }
 }
 
-function deployWorkers(c: DeployConfig, r: Runner, urls: { gateway: string; reader?: string }): void {
+function deployWorkers(c: DeployConfig, r: Runner, urls: { reader?: string }): void {
   r.log(`app: ビルドと配備（定義: ${c.wranglerConfig}）`)
   must(r.exec({ cmd: "npm", args: ["run", "build:worker"] }), "Workers のビルド")
   must(r.exec({ cmd: "npm", args: ["run", "build:web"] }), "画面のビルド")
 
-  // INTERNAL_TOKEN は Secret Manager の値を標準入力で渡す（毎回同じ値になる）
-  const token = c.dryRun ? "" : must(r.query({ cmd: "gcloud", args: ["secrets", "versions", "access", "latest", `--secret=${c.secret}`] }), "共有シークレットの取得").stdout
-  must(r.exec({ cmd: "npx", args: ["wrangler", "secret", "put", "INTERNAL_TOKEN", "--config", c.wranglerConfig], input: token }), "INTERNAL_TOKEN の設定")
+  // INTERNAL_TOKEN は読み取りサービスを使うときだけ、Secret Manager の値を標準入力で渡す（毎回同じ値になる）
+  if (urls.reader) {
+    const token = c.dryRun ? "" : must(r.query({ cmd: "gcloud", args: ["secrets", "versions", "access", "latest", `--secret=${c.secret}`] }), "共有シークレットの取得").stdout
+    must(r.exec({ cmd: "npx", args: ["wrangler", "secret", "put", "INTERNAL_TOKEN", "--config", c.wranglerConfig], input: token }), "INTERNAL_TOKEN の設定")
+  }
 
   // COOKIE_SECRET を作り直すと登録済みの認証情報がすべて失効するため、未設定のときだけ作る
   if (secretNames(c, r).includes("COOKIE_SECRET")) {
@@ -165,19 +166,21 @@ function deployWorkers(c: DeployConfig, r: Runner, urls: { gateway: string; read
   must(
     r.exec({
       cmd: "npx",
-      args: ["wrangler", "deploy", "--config", c.wranglerConfig, "--var", `XREA_GATEWAY_URL:${urls.gateway}`, "--var", `PROTON_READER_URL:${urls.reader ?? ""}`],
+      args: ["wrangler", "deploy", "--config", c.wranglerConfig, "--var", `PROTON_READER_URL:${urls.reader ?? ""}`],
     }),
     "Workers のデプロイ",
   )
 }
 
-/** 一括で配備する。Cloud Run のURLは配備後に決まるため、コンテナ → Workers の順に進める */
-export function deploy(c: DeployConfig, r: Runner): { gateway: string; reader?: string } {
-  prepareGcp(c, r)
-  const gateway = redeployContainer(c, r, { service: GATEWAY_SERVICE, target: "app", extra: GATEWAY_COMMAND })
-  const reader = c.reader ? redeployContainer(c, r, { service: READER_SERVICE, target: "reader", extra: [] }) : undefined
-  deployWorkers(c, r, { gateway, reader })
-  return { gateway, reader }
+/** 一括で配備する。Cloud Run のURLは配備後に決まるため、コンテナ → Workers の順に進める。読み取りサービスを配備しないときは Google Cloud に触れない */
+export function deploy(c: DeployConfig, r: Runner): { reader?: string } {
+  let reader: string | undefined
+  if (c.reader) {
+    prepareGcp(c, r)
+    reader = redeployContainer(c, r, { service: READER_SERVICE, target: "reader", extra: [] })
+  }
+  deployWorkers(c, r, { reader })
+  return { reader }
 }
 
 /** 変更を伴う操作の実行（dry-run のときは表示だけ） */
@@ -209,16 +212,15 @@ async function main(argv: string[]): Promise<number> {
   }
   try {
     const urls = deploy(c, realRunner(c.dryRun))
-    console.log(`\nゲートウェイ: ${urls.gateway}`)
     if (urls.reader) console.log(`読み取りサービス: ${urls.reader}`)
     if (c.dryRun) return 0
     if (!c.appUrl) {
       console.log("\nAPP_URL が未設定のため疎通確認を飛ばしました。app のURLを指定して次を実行してください:")
-      console.log(`  npx tsx scripts/cloud/check.ts probe --app \$APP_URL --gateway ${urls.gateway}${urls.reader ? ` --reader ${urls.reader}` : ""}`)
+      console.log(`  npx tsx scripts/cloud/check.ts probe --app \$APP_URL${urls.reader ? ` --reader ${urls.reader}` : ""}`)
       return 0
     }
     const { probe } = await import("./check")
-    const results = await probe({ app: c.appUrl, gateway: urls.gateway, reader: urls.reader })
+    const results = await probe({ app: c.appUrl, reader: urls.reader })
     for (const p of results) console.log(`${p.ok ? "成功" : "失敗"}: ${p.name}（${p.detail}）`)
     return results.every(p => p.ok) ? 0 : 1
   } catch (e) {

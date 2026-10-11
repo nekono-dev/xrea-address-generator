@@ -119,7 +119,7 @@ describe.each([
     expect(left.filter(r => r.expires_at < NOW + LIFETIME_SEC + 100)).toHaveLength(0)
   })
 
-  test("credential-session/AC-26: ログアウトで行が削除され、ログアウト前のcookieの値を再送しても未登録になる", async () => {
+  test("credential-session/AC-27: ログアウトで行が削除され、ログアウト前のcookieの値を再送しても未登録になる", async () => {
     fresh()
     const cookie = asRequestCookie(await store.save(cred("1"), { now: NOW }))
     const cleared = await store.remove(cookie)
