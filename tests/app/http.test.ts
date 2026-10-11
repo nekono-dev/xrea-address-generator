@@ -70,7 +70,7 @@ describe("設定", () => {
     expect(() => loadAppConfig({ ...ENV, COOKIE_SECRET: "short" })).toThrow("COOKIE_SECRET")
     expect(() => loadAppConfig({ ...ENV, XREA_GATEWAY_URL: "ftp://x" })).toThrow(ConfigError)
     expect(() => loadAppConfig({ ...ENV, CREDENTIAL_STORE: "sqlite" }, { allowSqlite: false })).toThrow(ConfigError)
-    expect(loadAppConfig({ ...ENV, XREA_GATEWAY_URL: "http://gw:8081/" }).gatewayUrl).toBe("http://gw:8081")
+    expect(loadAppConfig({ ...ENV, XREA_GATEWAY_URL: "http://xrea-gateway:8081/" }).gatewayUrl).toBe("http://xrea-gateway:8081")
   })
 
   test("alias-service/AC-11: TUNNEL_TOKEN が未設定または空なら全アドレス、設定があれば自アドレスのみで待ち受け、明示はそれらに優先する", () => {

@@ -8,7 +8,7 @@ let cached: Promise<{ fetch(req: Request): Response | Promise<Response> }> | nul
 
 /** 環境の束縛から設定を読み、isolate ごとに1回だけ組み立てる */
 function getApi(env: Env) {
-  cached ??= buildApi(loadAppConfig(env as Record<string, string | undefined>, { allowSqlite: false })).catch(e => {
+  cached ??= buildApi(loadAppConfig(env as Record<string, string | undefined>, { allowSqlite: false, httpPolicy: "all" })).catch(e => {
     cached = null
     throw e
   })

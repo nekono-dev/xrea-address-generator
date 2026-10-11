@@ -1,6 +1,7 @@
 // 環境変数（Workersでは環境の束縛）の読み込みと検証。入力は process.env と同じ形式の文字列の辞書。
 import { ConfigError, loadCredentialConfig, type CredentialConfig } from "../credentials/config"
 import { MIN_TOKEN_LENGTH } from "../shared/internalAuth"
+import { allowsHttp, type HttpPolicy } from "./internalUrl"
 import { loadServers } from "./servers"
 
 export { ConfigError }
@@ -18,7 +19,7 @@ export type AppConfig = {
   logLevel: string
 }
 
-function url(env: Record<string, string | undefined>, name: string, required: boolean): string | null {
+function url(env: Record<string, string | undefined>, name: string, required: boolean, policy: HttpPolicy): string | null {
   const v = (env[name] ?? "").trim()
   if (!v) {
     if (required) throw new ConfigError(`${name} が未設定です`)
@@ -27,15 +28,20 @@ function url(env: Record<string, string | undefined>, name: string, required: bo
   try {
     const u = new URL(v)
     if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error()
-  } catch {
+    if (!allowsHttp(u, policy)) {
+      throw new ConfigError(`${name} は${policy === "all" ? "https" : "https、または内部ネットワークのホストの http"} のURLにしてください`)
+    }
+  } catch (e) {
+    if (e instanceof ConfigError) throw e
     throw new ConfigError(`${name} がURLの形式ではありません`)
   }
   return v.replace(/\/+$/, "")
 }
 
-export function loadAppConfig(env: Record<string, string | undefined>, opts: { allowSqlite?: boolean; readFile?: (path: string) => string } = {}): AppConfig {
+export function loadAppConfig(env: Record<string, string | undefined>, opts: { allowSqlite?: boolean; httpPolicy?: HttpPolicy; readFile?: (path: string) => string } = {}): AppConfig {
   const allowSqlite = opts.allowSqlite ?? true
-  const gatewayUrl = url(env, "XREA_GATEWAY_URL", true)!
+  const policy = opts.httpPolicy ?? "external"
+  const gatewayUrl = url(env, "XREA_GATEWAY_URL", true, policy)!
   const internalToken = env.INTERNAL_TOKEN ?? ""
   if (internalToken.length < MIN_TOKEN_LENGTH) throw new ConfigError(`INTERNAL_TOKEN は${MIN_TOKEN_LENGTH}文字以上で設定してください`)
   const credentials = loadCredentialConfig(env)
@@ -45,7 +51,7 @@ export function loadAppConfig(env: Record<string, string | undefined>, opts: { a
   return {
     gatewayUrl,
     internalToken,
-    readerUrl: url(env, "PROTON_READER_URL", false),
+    readerUrl: url(env, "PROTON_READER_URL", false, policy),
     credentials,
     servers: loadServers(env, opts.readFile),
     // トンネルを使わない（TUNNEL_TOKEN が未設定の）ときは、LANから接続できるよう全アドレスで待ち受ける

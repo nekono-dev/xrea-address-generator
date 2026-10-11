@@ -95,8 +95,8 @@ docker compose -f compose.yaml -f compose.lan.yaml up -d
 | --- | --- | --- | --- |
 | `COOKIE_SECRET` | 必須 | | 32 文字以上。認証情報の暗号化の鍵を導出する |
 | `INTERNAL_TOKEN` | 必須 | | 32 文字以上。内部サービスとの共有シークレット |
-| `XREA_GATEWAY_URL` | 必須 | | `xrea-gateway` の URL（Docker では未設定なら compose が `http://xrea-gateway:8081` を設定する） |
-| `PROTON_READER_URL` | 任意 | | `proton-reader` の URL。空なら Proton Pass 連携を使わない |
+| `XREA_GATEWAY_URL` | 必須 | | `xrea-gateway` の URL（Docker では未設定なら compose が `http://xrea-gateway:8081` を設定する）。Workers は https のみ。Node.js/Docker は https のほか、`xrea-gateway`・`proton-reader`・`localhost`・プライベートIP（10/8、172.16/12、192.168/16）への http だけを許す |
+| `PROTON_READER_URL` | 任意 | | `proton-reader` の URL。空なら Proton Pass 連携を使わない。通信方式の制限は `XREA_GATEWAY_URL` と同じ |
 | `CREDENTIAL_STORE` | 任意 | `cookie` | `cookie` または `sqlite`（Workers は `cookie` のみ） |
 | `CREDENTIAL_DB_PATH` | 任意 | `/var/lib/xrea-address-generator/sessions.db` | `sqlite` のときの保存先 |
 | `COOKIE_SECURE` | 任意 | `1` | `0` で cookie の `Secure` 属性を外す（LAN の HTTP 公開用） |

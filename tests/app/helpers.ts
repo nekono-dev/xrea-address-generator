@@ -9,10 +9,10 @@ import { FakeXrea, sampleMails } from "../gateway/fakes"
 
 export const INTERNAL = "i".repeat(32)
 export const ENV = {
-  XREA_GATEWAY_URL: "http://gateway.test",
+  XREA_GATEWAY_URL: "https://gateway.test",
   INTERNAL_TOKEN: INTERNAL,
   COOKIE_SECRET: "c".repeat(40),
-  PROTON_READER_URL: "http://reader.test",
+  PROTON_READER_URL: "https://reader.test",
 }
 export const XREA = { account: "acct", serverName: "s1.xrea.com", apiSecretKey: "XREA-SECRET-KEY" }
 export const BODY = { xrea: XREA, protonToken: "PROTON-PAT-VALUE" }
