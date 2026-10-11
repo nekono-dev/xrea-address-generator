@@ -33,10 +33,10 @@
 | DELETE /v1/aliases/:address         | アドレスをURLエンコードしたパス | 204                             |
 | DELETE /v1/aliases/:address/forward | アドレスをURLエンコードしたパス | 200 { alias }                   |
 | GET /v1/options                     | なし                            | 200 { domains, forwardTargets } |
-| GET /healthz                        | なし                            | 200 { ok: true }                |
+| GET /healthz, GET /health           | なし                            | 200 { ok: true }                |
 
 ```ts
-// /healthz 以外の全ルートの前段
+// /healthz と /health 以外の全ルートの前段
 export function internalAuth(token: string): MiddlewareHandler // Authorization: Bearer <INTERNAL_TOKEN> を定数時間で比較する
 
 // 認証情報は要求ヘッダで受け取る

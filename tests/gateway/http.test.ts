@@ -41,6 +41,7 @@ describe("認証と死活確認", () => {
     const res = await app.request("/healthz")
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
+    expect((await app.request("/health")).status).toBe(200)
   })
 
   test("INTERNAL_TOKEN が未設定または短いと、変数名を示して失敗する", () => {

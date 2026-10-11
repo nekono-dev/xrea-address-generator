@@ -7,10 +7,11 @@
 | `wrangler.toml`              | Workersの配備の定義（スクリプト、画面ファイル、変数、秘密の名前） |
 | `web/public/_headers`        | 画面ファイルのキャッシュの指示                                    |
 | `scripts/cloud/check.ts`     | コンテナ基盤の要件の検査と、配備後の疎通確認                      |
-| `docs/cloud-deploy.md`       | 配備の手順（Workers、コンテナ基盤の要件、秘匿値の設定）           |
+| `docs/cloud-deploy.md`       | 構成の図と配備の手順（Workers、Cloud Run、秘匿値の設定）          |
 | `tests/cloud/config.test.ts` | 配備の定義・ヘッダ・秘匿値の非混入のテスト                        |
 | `tests/cloud/check.test.ts`  | 要件の検査と疎通確認の単体テスト                                  |
 | `tests/cloud/cpu.test.ts`    | 一覧の要求のCPU時間のテスト                                       |
+| `tests/cloud/doc.test.ts`    | 手順書の図と手順の内容のテスト                                    |
 
 ## 2. 設計項目
 
@@ -94,11 +95,11 @@ export async function probe(env: {
 }): Promise<Probe[]> {
   return [
     await get(`${env.app}/healthz`), // Workers
-    await get(`${env.gateway}/healthz`), // ゲートウェイの死活
+    await get(`${env.gateway}/health`), // ゲートウェイの死活（Cloud Run は /healthz を予約するため /health）
     await expect401(`${env.gateway}/v1/aliases`), // 共有シークレットなしは 401
     ...(env.reader
       ? [
-          await get(`${env.reader}/healthz`),
+          await get(`${env.reader}/health`),
           await expect401(`${env.reader}/v1/entries`),
         ]
       : []),
@@ -127,6 +128,37 @@ export async function probe(env: {
 | 合計                           | 10ミリ秒 |
 
 ゲートウェイと読み取りサービスの応答の待ちは、CPU時間に数えない。レスポンスの本文は逐次の変換を行わず、そのまま中継する。
+
+### D-6: 構成の図と Cloud Run の手順 (FR-9, FR-10)
+
+手順書は次の順に構成する。図は Mermaid で書く。
+
+| 節               | 内容                                                                            |
+| ---------------- | ------------------------------------------------------------------------------- |
+| 構成             | 構成図（利用者・Workers・ゲートウェイ・読み取りサービス・外部サービス）         |
+| 配備の順序       | シーケンス図（ゲートウェイ → 読み取りサービス → Workers → 疎通確認）            |
+| 共通の前提       | 秘匿値の作り方と、コンテナ基盤に求める条件                                      |
+| Cloud Run の手順 | プロジェクト、API の有効化、Artifact Registry、Secret Manager、ビルド、デプロイ |
+| Workers の手順   | ビルド、変数、秘密、デプロイ                                                    |
+
+Cloud Run の設定値:
+
+| 項目               | ゲートウェイ                                              | 読み取りサービス             |
+| ------------------ | --------------------------------------------------------- | ---------------------------- |
+| イメージ           | `--target app` のイメージ                                 | `--target reader` のイメージ |
+| 起動コマンド       | `--command node --args /app/dist/gateway/main.js`         | 既定（イメージの CMD）       |
+| 最大インスタンス数 | `--max-instances 1`                                       | `--max-instances 1`          |
+| 公開               | `--allow-unauthenticated`（共有シークレットが認可を担う） | 同左                         |
+| INTERNAL_TOKEN     | `--set-secrets INTERNAL_TOKEN=<名前>:latest`              | 同左                         |
+| PORT               | 指定しない（Cloud Run が設定し、予約されている）          | 同左                         |
+| 最小インスタンス数 | 0                                                         | 0                            |
+
+```sh
+# 秘匿値は標準出力に出さず、標準入力から Secret Manager へ渡す
+openssl rand -base64 48 | tr -d '\n' | gcloud secrets create xrea-internal-token --data-file=-
+```
+
+ゲートウェイと読み取りサービスは環境変数 PORT を読むため、Cloud Run が設定する値でそのまま待ち受ける。
 
 ## 3. エラー処理
 

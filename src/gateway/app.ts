@@ -38,7 +38,9 @@ export function createGatewayApp(opts: { registry: Registry; internalToken: stri
     return c.json(errorBody("internal_error", "サーバでエラーが発生しました"), 500)
   })
 
+  // Cloud Run は z で終わるパス（/healthz）を予約しているため、/health も同じ応答にする
   app.get("/healthz", c => c.json({ ok: true }))
+  app.get("/health", c => c.json({ ok: true }))
 
   const auth = internalAuth(opts.internalToken)
   app.use("/v1/*", auth)
