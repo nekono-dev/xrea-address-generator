@@ -4,6 +4,5 @@
 .git
 node_modules
 dist
-installer-dist
 test-results
 playwright-report

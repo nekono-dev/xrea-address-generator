@@ -22,7 +22,6 @@ XREA のメール転送アドレス（エイリアス）を、ワンボタンで
 | `src/server` | HTTP API と画面ファイルの配信（Hono） |
 | `web` | 画面（Preact。ブラウザ標準の部品は使わず、すべて独自の部品で構成）と、PWA の宣言・アイコン・Service Worker |
 | `api` | 公式ドキュメントの基準・補正定義・生成した OpenAPI |
-| `installer` | LXC／ベアメタル向けインストーラ |
 | `specs` | 仕様書（要件定義・設計・タスク） |
 
 仕様書は `specs/<コンポーネント>/` にあり、`npm run lint:spec` で検査します。
@@ -38,7 +37,7 @@ XREA のメール転送アドレス（エイリアス）を、ワンボタンで
      --vault-name "<照合に使うVault名>" --role viewer
    ```
    アプリは Vault の名前を指定せず、このトークンで参照できるすべての Vault を調べます。照合の対象は、ここで権限を与えた Vault で決まります。
-3. **Cloudflare Tunnel のトークン**（省略すると、トンネルを使わず LAN に公開します）: 公開ホスト名の接続先は、Docker 構成では `http://app:3000`、LXC 構成では `http://127.0.0.1:3000` にします。アクセス制御は Cloudflare Access で行ってください（アプリ自身は認証を持ちません）。PWA の宣言は Cloudflare Access の認証情報を付けて取得するよう指定しています。Access のセッションが切れた状態で開くと、保存した画面ではなく Access のログイン画面へ進みます。
+3. **Cloudflare Tunnel のトークン**（省略すると、トンネルを使わず LAN に公開します）: 公開ホスト名の接続先は、Docker 構成では `http://app:3000` にします。アクセス制御は Cloudflare Access で行ってください（アプリ自身は認証を持ちません）。PWA の宣言は Cloudflare Access の認証情報を付けて取得するよう指定しています。Access のセッションが切れた状態で開くと、保存した画面ではなく Access のログイン画面へ進みます。
 
 ## Docker で動かす（アプリと Cloudflare Tunnel の2コンテナ）
 
@@ -54,36 +53,6 @@ docker compose up -d
 ```sh
 docker compose -f compose.yaml -f compose.lan.yaml up -d
 ```
-
-## LXC（Ubuntu）・ベアメタルで動かす
-
-Ubuntu 24.04 のコンテナ内で、root として実行します。秘匿値は `ps` やシェルの履歴に残らないよう、環境変数で渡してください。
-
-```sh
-wget -qO install.sh https://github.com/nekono-dev/xrea-address-generator/releases/latest/download/install.sh
-sudo env XREA_API_SECRET_KEY='…' PROTON_PASS_PERSONAL_ACCESS_TOKEN='…' TUNNEL_TOKEN='…' \
-  sh install.sh install --set XREA_ACCOUNT=… --set XREA_SERVER_NAME=…
-```
-
-LXD のホストから入れる場合:
-
-```sh
-lxc exec <コンテナ名> --env XREA_API_SECRET_KEY='…' --env PROTON_PASS_PERSONAL_ACCESS_TOKEN='…' -- \
-  sh -c 'wget -qO- <URL>/install.sh | sh -s -- install --set XREA_ACCOUNT=… --set XREA_SERVER_NAME=…'
-```
-
-- 設定は `/etc/xrea-address-generator/xrea-address-generator.env`（権限600）に保存されます。手で編集した値は、再導入や更新でも保持されます。
-- `PROTON_PASS_PERSONAL_ACCESS_TOKEN` は省略できます（省略すると Proton Pass 連携を使いません）。
-- `TUNNEL_TOKEN` を設定すると cloudflared も導入し、アプリは `127.0.0.1` だけで待ち受けます（空にすると cloudflared を取り除きます）。設定しないときは、LAN から `http://<サーバのアドレス>:3000/` で使えるよう `0.0.0.0` で待ち受けます。
-- 以前の版で導入した設定ファイルに `BIND_ADDRESS='127.0.0.1'` が書かれているときは、手で消すか `--set BIND_ADDRESS=` で空にすると、上記の自動の決定になります。
-- 導入後は常設コマンドで管理します。
-
-| コマンド | 動作 |
-| --- | --- |
-| `xrea-address-generator-ctl update` | 導入時のブランチ・タグの最新へ追従し、再ビルドして再起動する（Proton Pass CLI も最新版を取得し直す） |
-| `xrea-address-generator-ctl status` | 導入先・参照名・コミット・取得元・更新日時を表示する |
-| `xrea-address-generator-ctl uninstall` | アプリ本体を削除する（設定とデータは残す） |
-| `xrea-address-generator-ctl uninstall --purge` | 設定・データ・専用ユーザーも削除する |
 
 ## 環境変数
 

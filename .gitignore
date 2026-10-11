@@ -1,7 +1,6 @@
 .env
 node_modules/
 dist/
-installer-dist/
 .proton-session/
 test-results/
 playwright-report/
