@@ -2,7 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { describe, expect, test } from "vitest"
 import { CachedReader, DisabledReader, TTL_MS, type Status } from "../../src/proton/cache"
-import { CliError, type CliRunner } from "../../src/proton/cli"
+import { CliError, FIXED_MESSAGES, type CliRunner } from "../../src/proton/cli"
 import { createProtonReader, loadProtonConfig } from "../../src/proton/index"
 import { Session } from "../../src/proton/session"
 import { vaultsJson, withVaults } from "./helpers"
@@ -220,5 +220,30 @@ describe("Vaultの探索と連携の無効化", () => {
     expect(reader.getStatus()).toEqual({ state: "disabled", updatedAt: null, reloginAt: null, itemCount: null, error: null })
     await new Promise(r => setTimeout(r, 50))
     expect(fs.readFileSync(`${bin}.called`, "utf8").trim()).toBe("no")
+  })
+})
+
+describe("取得に失敗した後", () => {
+  test("proton-pass-reader/AC-17: 取得に失敗した後は有効期間が過ぎても自動で再取得せず、無効なトークンでは差し替えを求める文言になる", async () => {
+    let t = 0
+    let round = 0
+    const run: CliRunner = async args => {
+      if (args[0] === "login") throw new CliError("token", FIXED_MESSAGES.token)
+      if (round++ === 0) return { stdout: fixture, durationMs: 1 }
+      throw new CliError("unknown", "セッションがありません", true)
+    }
+    const { reader } = setup({ run, now: () => t })
+    await reader.refresh()
+    t = TTL_MS
+    await reader.refresh() // 失敗する
+    expect(reader.getStatus().state).toBe("error")
+    expect(reader.getStatus().error!.message).toContain("トークンを差し替えて")
+    const before = round
+    t = TTL_MS * 5
+    reader.getMap()
+    reader.getMap()
+    await new Promise(r => setTimeout(r, 20))
+    expect(round).toBe(before) // 公式CLIは呼び出されない
+    expect(reader.getStatus().state).toBe("error")
   })
 })

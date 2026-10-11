@@ -46,7 +46,8 @@ export class CachedReader implements ProtonReader {
 
   getMap(): AddressMap {
     const ttl = this.opts.ttlMs ?? TTL_MS
-    if (this.fetchedAt !== null && this.now() - this.fetchedAt >= ttl && !this.inflight) void this.refresh()
+    // 取得に失敗した後（state が error）は、自動では再取得しない
+    if (this.status.state === "ready" && this.fetchedAt !== null && this.now() - this.fetchedAt >= ttl && !this.inflight) void this.refresh()
     return this.map
   }
 
