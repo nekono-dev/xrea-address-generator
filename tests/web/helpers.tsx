@@ -24,6 +24,8 @@ export function fakeServer(init: { aliases?: Alias[]; proton?: ProtonStatus; dom
     const key = `${method} ${url.replace(/\/api\/aliases\/.+$/, "/api/aliases/:address")}`
     if (overrides[key]) return overrides[key]!({ method, url, body })
     switch (key) {
+      case "GET /api/credentials":
+        return { status: 200, body: { registered: true, proton: true, expiresAt: "2026-10-18T00:00:00.000Z" } }
       case "GET /api/aliases":
         return { status: 200, body: { aliases: state.aliases, proton: state.proton } }
       case "GET /api/options":

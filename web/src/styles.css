@@ -488,6 +488,71 @@ h1 {
   cursor: default;
 }
 
+/* 認証情報の登録画面とヘッダのボタン。入力欄・ボタンの高さは --h、文字は --fs に従う */
+.head {
+  position: relative;
+}
+.cred-btn {
+  position: absolute;
+  top: 24px;
+  right: 16px;
+  height: var(--h);
+  font-size: var(--fs-xs);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  color: var(--mut);
+  padding: 0 10px;
+  cursor: pointer;
+  outline: 0;
+}
+.cred-btn:hover,
+.cred-btn:focus-visible {
+  color: var(--fg);
+  border-color: var(--acc);
+}
+.cred {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 28rem);
+  margin: 0 auto;
+  padding: 28px 0;
+}
+.cred h2 {
+  margin: 0;
+  font-size: var(--fs-m);
+}
+.cred-form {
+  display: grid;
+  gap: 14px;
+}
+.cred-field {
+  display: grid;
+  gap: 6px;
+  color: var(--mut);
+  font-size: var(--fs-s);
+}
+.cred-field .fld {
+  flex: none;
+  width: 100%;
+  overflow-x: auto;
+  color: var(--fg);
+}
+.cred .btn,
+.cred .ghost {
+  height: var(--h);
+}
+.cred-notice {
+  margin: 0;
+  color: var(--acc);
+  font-size: var(--fs-s);
+}
+.cred-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--fs-s);
+}
+
 /* スマートフォン向けの表示（幅680ピクセル未満）。文字は約1.2倍、部品の高さは44ピクセル */
 @media (max-width: 679.98px) {
   :root {

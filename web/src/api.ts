@@ -31,7 +31,14 @@ export function setFetch(f: FetchLike): void {
   doFetch = f
 }
 
-async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+const requiredListeners = new Set<() => void>()
+/** code が credentials_required の応答を受けたときに呼ばれる購読を登録する。戻り値で解除する */
+export function onCredentialsRequired(fn: () => void): () => void {
+  requiredListeners.add(fn)
+  return () => void requiredListeners.delete(fn)
+}
+
+export async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   let res: Response
   try {
     res = await doFetch(url, {
@@ -51,6 +58,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   }
   if (!res.ok) {
     const e = (json as Partial<ApiErrorBody>)?.error
+    if (e?.code === "credentials_required") for (const f of requiredListeners) f()
     throw new ApiFailure(res.status, e?.code ?? "unknown", e?.message ?? `サーバでエラーが発生しました（HTTP ${res.status}）`)
   }
   return json as T

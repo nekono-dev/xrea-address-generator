@@ -1,6 +1,7 @@
 // 状態の保持（一覧、候補、絞り込み、並び順、通知）。
 import { useEffect, useState } from "preact/hooks"
 import type { Alias, Options, ProtonStatus } from "./api"
+import type { CredentialState } from "./credentials"
 
 export type SortOrder = "asc" | "desc"
 export type ToastItem = { id: number; text: string }
@@ -15,6 +16,7 @@ export type State = {
   proton: ProtonStatus | null
   flash: string | null // 強調表示する行のアドレス
   toasts: ToastItem[]
+  credential: CredentialState
 }
 
 export const ALL_DOMAINS = "すべてのドメイン"
@@ -31,6 +33,7 @@ const initial = (): State => ({
   proton: null,
   flash: null,
   toasts: [],
+  credential: "unknown",
 })
 
 export function createStore(start: State = initial()) {

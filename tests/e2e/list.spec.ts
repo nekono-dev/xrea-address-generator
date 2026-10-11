@@ -60,7 +60,9 @@ test.describe("一覧と行の操作", () => {
     await expect(page.locator(".row").first()).toBeVisible()
     expect(await page.locator("select, dialog, datalist").count()).toBe(0)
 
-    // 発行: Tab で名前欄へ移動し、入力して Enter
+    // 発行: Tab で（ヘッダの認証情報ボタンを経て）名前欄へ移動し、入力して Enter
+    await page.keyboard.press("Tab")
+    await expect(page.locator("#cred-open")).toBeFocused()
     await page.keyboard.press("Tab")
     await expect(page.locator("#name")).toBeFocused()
     await page.keyboard.type("kbd-only")

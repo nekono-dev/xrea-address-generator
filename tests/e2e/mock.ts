@@ -17,11 +17,14 @@ export const manyAliases = (): Alias[] => {
   return list
 }
 
-export async function mockApi(page: Page, init: { aliases?: Alias[]; proton?: ProtonStatus; protonSequence?: ProtonStatus[] } = {}) {
+export async function mockApi(page: Page, init: { aliases?: Alias[]; proton?: ProtonStatus; protonSequence?: ProtonStatus[]; registered?: boolean } = {}) {
   const state = {
     aliases: init.aliases ?? manyAliases(),
     proton: init.proton ?? ready(),
     protonSequence: init.protonSequence ?? [],
+    registered: init.registered ?? true,
+    /** 登録の要求が返す失敗。null なら成功（204） */
+    putFailure: null as null | { status: number; code: string; message: string },
     domains: ["example.com", "example.net", "example.org"],
     forwardTargets: ["family@mail.example", "me@mail.example", "sub@mail.example"],
   }
@@ -38,7 +41,16 @@ export async function mockApi(page: Page, init: { aliases?: Alias[]; proton?: Pr
     requests.push({ method: req.method(), path: url.pathname, body })
     const json = (status: number, b?: unknown) => route.fulfill({ status, contentType: "application/json", body: b === undefined ? "" : JSON.stringify(b) })
     const key = `${req.method()} ${url.pathname.startsWith("/api/aliases/") ? "/api/aliases/:address" : url.pathname}`
+    // 保護対象のAPIは、未登録（期限切れを含む）なら登録を求める
+    if (!state.registered && !url.pathname.startsWith("/api/credentials"))
+      return json(401, { error: { code: "credentials_required", message: "認証情報を登録してください" } })
     switch (key) {
+      case "GET /api/credentials":
+        return json(200, state.registered ? { registered: true, proton: true, expiresAt: "2026-10-18T00:00:00.000Z" } : { registered: false })
+      case "PUT /api/credentials":
+        if (state.putFailure) return json(state.putFailure.status, { error: { code: state.putFailure.code, message: state.putFailure.message } })
+        state.registered = true
+        return route.fulfill({ status: 204, body: "" })
       case "GET /api/aliases":
         return json(200, { aliases: state.aliases, proton: state.proton })
       case "GET /api/options":

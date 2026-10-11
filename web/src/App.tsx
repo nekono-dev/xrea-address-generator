@@ -1,17 +1,21 @@
-// 画面全体の組み立て。一覧と候補の読み込み、照合状態の確認の繰り返し。
-import { useEffect, useRef } from "preact/hooks"
-import { api } from "./api"
+// 画面全体の組み立て。登録状態による画面の切り替え、一覧と候補の読み込み、照合状態の確認の繰り返し。
+import type { ComponentChildren } from "preact"
+import { useEffect, useRef, useState } from "preact/hooks"
+import { api, onCredentialsRequired } from "./api"
+import { credentialsApi } from "./credentials"
 import { loadPrefs } from "./prefs"
 import { OfflineBanner } from "./pwa"
 import { AliasList } from "./components/AliasList"
 import { Banner } from "./components/Banner"
+import { CredentialsButton } from "./components/CredentialsButton"
+import { CredentialsPanel } from "./components/CredentialsPanel"
 import { IssueForm } from "./components/IssueForm"
 import { Toasts } from "./components/Toast"
 import { store as defaultStore, useStore, type Store } from "./store"
 
 export const POLL_MS = 5000
 
-export function App({ store = defaultStore, pollMs = POLL_MS }: { store?: Store; pollMs?: number }) {
+function Main({ store, pollMs, header }: { store: Store; pollMs: number; header: ComponentChildren }) {
   const proton = useStore(s => s.proton, store)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -89,8 +93,9 @@ export function App({ store = defaultStore, pollMs = POLL_MS }: { store?: Store;
 
   return (
     <>
-      <div class="wrap">
+      <div class="wrap head">
         <h1>ALIAS GENERATOR</h1>
+        {header}
       </div>
       <div class="sticky" id="sticky">
         <div class="wrap">
@@ -106,4 +111,43 @@ export function App({ store = defaultStore, pollMs = POLL_MS }: { store?: Store;
       <Toasts store={store} />
     </>
   )
+}
+
+export function App({ store = defaultStore, pollMs = POLL_MS }: { store?: Store; pollMs?: number }) {
+  const state = useStore(s => s.credential, store)
+  const [editing, setEditing] = useState(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
+
+  useEffect(() => {
+    // 起動時に登録状態を問い合わせる。失敗したときは登録画面に通信の失敗を表示する
+    credentialsApi
+      .status()
+      .then(r => store.set({ credential: r.registered ? "registered" : "missing" }))
+      .catch(e => {
+        setStatusError((e as Error).message)
+        store.set({ credential: "missing" })
+      })
+    // 操作中のAPIが登録を求めたら、期限切れとして登録画面へ切り替える
+    return onCredentialsRequired(() => store.set(s => (s.credential === "registered" ? { credential: "expired" } : {})))
+  }, [])
+
+  function registered() {
+    // 前の認証情報で取得した内容を引き継がない
+    store.set({ aliases: [], listLoaded: false, listError: null, options: { domains: [], forwardTargets: [] }, optionsError: null, proton: null, credential: "registered" })
+    setEditing(false)
+    setStatusError(null)
+  }
+
+  if (state === "unknown") return null
+  if (state !== "registered" || editing) {
+    return (
+      <CredentialsPanel
+        notice={state === "expired" ? "認証情報の有効期限が切れました。もう一度登録してください" : null}
+        initialError={statusError}
+        onRegistered={registered}
+        onCancel={state === "registered" ? () => setEditing(false) : undefined}
+      />
+    )
+  }
+  return <Main store={store} pollMs={pollMs} header={<CredentialsButton onClick={() => setEditing(true)} />} />
 }
