@@ -8,6 +8,7 @@
 | `src/credentials/seal.ts`           | 鍵の導出、暗号化、復号（WebCrypto）                   |
 | `src/credentials/cookieStore.ts`    | cookie方式の保持                                      |
 | `src/credentials/sqliteStore.ts`    | SQLite方式の保持                                      |
+| `src/credentials/sqliteClient.ts`   | Node.js組み込みSQLiteによるSQLクライアントの実装      |
 | `src/credentials/config.ts`         | 秘密値・保持方式・Secure属性の読み込みと検証          |
 | `src/credentials/routes.ts`         | 登録と問い合わせのルート、保護対象の要求の検査        |
 | `tests/credentials/seal.test.ts`    | 暗号化・復号・改ざん・鍵違いの単体テスト              |
@@ -155,7 +156,7 @@ export function credentialRoutes(deps: {
 // GET /api/credentials  200 { registered: false } または
 //                       { registered: true, proton: boolean, expiresAt: "<ISO 8601>" }
 
-/** 保護対象のルートの前段。未登録なら 401 credentials_required。登録済みなら c.set("credentials", ...) */
+/** 保護対象のルートの前段。未登録なら 401 credentials_required。登録済みなら c.set("registration", ...) */
 export function requireCredentials(store: CredentialStore): MiddlewareHandler
 ```
 

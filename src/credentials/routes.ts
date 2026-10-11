@@ -1,0 +1,97 @@
+// 登録と問い合わせのルート、保護対象の要求の検査。
+import { Hono, type MiddlewareHandler } from "hono"
+import { AppError, STATUS, errorBody } from "../shared/errors"
+import type { Logger } from "../shared/logger"
+import { LIMITS, type CredentialStore, type Credentials, type Registration, type XreaCredentials } from "./types"
+
+/** XREAの一覧を1回取得できれば true */
+export type Verify = (x: XreaCredentials) => Promise<boolean>
+
+export type CredentialEnv = { Variables: { registration: Registration } }
+
+function str(v: unknown, name: keyof typeof LIMITS, required: boolean): string {
+  if (v === undefined || v === null || v === "") {
+    if (required) throw new AppError("validation_error", `${name} は必須です`)
+    return ""
+  }
+  if (typeof v !== "string") throw new AppError("validation_error", `${name} は文字列で指定してください`)
+  if (v.length > LIMITS[name]) throw new AppError("validation_error", `${name} は${LIMITS[name]}文字以内で指定してください`)
+  return v
+}
+
+export function parseCredentials(body: unknown): Credentials {
+  const b = (body && typeof body === "object" ? body : {}) as Record<string, unknown>
+  const x = (b.xrea && typeof b.xrea === "object" ? b.xrea : {}) as Record<string, unknown>
+  const token = str(b.protonToken, "protonToken", false)
+  return {
+    xrea: {
+      account: str(x.account, "account", true),
+      serverName: str(x.serverName, "serverName", true),
+      apiSecretKey: str(x.apiSecretKey, "apiSecretKey", true),
+    },
+    protonToken: token === "" ? null : token,
+  }
+}
+
+export function credentialRoutes(deps: { store: CredentialStore; verify: Verify; log: Logger }) {
+  const app = new Hono<CredentialEnv>()
+  const { store, verify, log } = deps
+
+  app.use("*", async (c, next) => {
+    const start = performance.now()
+    await next()
+    log.info({ route: `${c.req.method} ${c.req.routePath}`, status: c.res.status, durationMs: Math.round(performance.now() - start) })
+  })
+
+  app.onError((e, c) => {
+    if (e instanceof AppError) return c.json(errorBody(e.code, e.message), STATUS[e.code])
+    // 例外の詳細は秘匿値を含み得るため、名前だけを記録する
+    log.error({ route: `${c.req.method} ${c.req.routePath}`, error: (e as Error).name })
+    return c.json(errorBody("internal_error", "サーバでエラーが発生しました"), 500)
+  })
+
+  app.put("/api/credentials", async c => {
+    if (!(c.req.header("content-type") ?? "").toLowerCase().startsWith("application/json"))
+      throw new AppError("validation_error", "Content-Type は application/json にしてください")
+    let body: unknown
+    try {
+      body = await c.req.json()
+    } catch {
+      throw new AppError("validation_error", "要求の本文が不正なJSONです")
+    }
+    const credentials = parseCredentials(body)
+    let ok: boolean
+    try {
+      ok = await verify(credentials.xrea)
+    } catch {
+      throw new AppError("upstream_error", "XREAに接続できませんでした")
+    }
+    if (!ok) throw new AppError("invalid_credentials", "XREAの認証情報を確認してください")
+    const cookie = await store.save(credentials, { previousCookieHeader: c.req.header("cookie") ?? null })
+    c.header("Set-Cookie", cookie)
+    return c.body(null, 204)
+  })
+
+  app.get("/api/credentials", async c => {
+    const reg = await store.load(c.req.header("cookie") ?? null)
+    c.header("Cache-Control", "no-store")
+    if (!reg) return c.json({ registered: false })
+    return c.json({
+      registered: true,
+      proton: reg.credentials.protonToken !== null,
+      expiresAt: new Date(reg.expiresAt * 1000).toISOString(),
+    })
+  })
+
+  return app
+}
+
+/** 保護対象のルートの前段。未登録なら 401 credentials_required。登録済みなら c.set("registration", ...) */
+export function requireCredentials(store: CredentialStore): MiddlewareHandler<CredentialEnv> {
+  return async (c, next) => {
+    const reg = await store.load(c.req.header("cookie") ?? null)
+    if (!reg) return c.json(errorBody("credentials_required", "認証情報を登録してください"), 401)
+    c.set("registration", reg)
+    await next()
+  }
+}
