@@ -16,7 +16,7 @@ services:
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN を設定してください}
       CREDENTIAL_STORE: ${CREDENTIAL_STORE:-cookie}
       CREDENTIAL_DB_PATH: /var/lib/xrea-address-generator/data/sessions.db
-      XREA_GATEWAY_URL: http://xrea-gateway:8081
+      XREA_GATEWAY_URL: ${XREA_GATEWAY_URL:-http://xrea-gateway:8081} # 空なら同梱のゲートウェイ
       PROTON_READER_URL: ${PROTON_READER_URL:-} # 空なら Proton Pass 連携を使わない
       XREA_SERVERS_FILE: /app/config/xrea-servers.json
       LOG_LEVEL: ${LOG_LEVEL:-info}
