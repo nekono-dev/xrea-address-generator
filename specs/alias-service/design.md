@@ -9,11 +9,14 @@
 | `src/app/gatewayClient.ts`  | ゲートウェイへの要求                                  |
 | `src/app/readerClient.ts`   | 読み取りサービスへの要求                              |
 | `src/app/config.ts`         | 環境変数の読み込みと検証                              |
+| `src/app/servers.ts`        | サーバ名の一覧の読み込みと検証                        |
+| `config/xrea-servers.json`  | 組み込みの既定のサーバ名の一覧（設定ファイルの原本）  |
 | `src/app/static.ts`         | Node.jsでの画面ファイルの配信                         |
 | `src/app/node.ts`           | Node.jsの入口（設定の読み込み、組み立て、起動）       |
 | `src/app/worker.ts`         | Cloudflare Workersの入口                              |
 | `tests/app/service.test.ts` | 一覧の合成と中継の単体テスト                          |
 | `tests/app/http.test.ts`    | HTTPの入出力・401・秘匿値・配信のテスト               |
+| `tests/app/servers.test.ts` | サーバ名の一覧の問い合わせと読み込みのテスト          |
 | `tests/app/worker.test.ts`  | Workersの実行環境での応答のテスト                     |
 | `tests/app/bundle.test.ts`  | Workers向け成果物のサイズのテスト                     |
 
@@ -31,6 +34,7 @@
 | GET /api/proton/status       | なし                            | 200 ProtonStatus                |
 | POST /api/proton/refresh     | なし                            | 202                             |
 | PUT・GET /api/credentials    | 認証情報の登録と問い合わせ      | 認証情報の保持の仕様に従う      |
+| GET /api/servers             | なし（登録前でも呼べる）        | 200 { servers }                 |
 | GET /healthz                 | なし                            | 200 { ok: true }                |
 
 ```ts
@@ -202,6 +206,7 @@ const bindAddress =
 | BIND_ADDRESS       | 任意 | TUNNEL_TOKEN があれば 127.0.0.1、無ければ 0.0.0.0       |
 | PORT               | 任意 | 3000                                                    |
 | LOG_LEVEL          | 任意 | info                                                    |
+| XREA_SERVERS_FILE  | 任意 | なし（組み込みの一覧）                                  |
 
 ### D-7: Workersの入口 (FR-9, NFR-1, NFR-2)
 
@@ -228,6 +233,25 @@ export default {
 | 禁止             | node: の組み込みモジュール、ファイル、プロセスの環境変数に依存する部品を、このスクリプトに含めない |
 | 設定             | 環境の束縛（変数と秘密）を config.ts の読み込み関数へ渡す。形式は process.env と同じ文字列の辞書   |
 | 保持方式         | cookie のみ（SQLite方式の設定は起動時に拒否）                                                      |
+
+### D-8: サーバ名の一覧 (FR-12)
+
+```ts
+// config/xrea-servers.json: { "servers": ["s1.xrea.com", ...] }。XREAのログイン画面のサーバの選択肢と同じ内容
+export function parseServers(text: string): string[] // 形式が不正なら ConfigError。重複を除き、順序を保つ
+export function loadServers(
+  env: Record<string, string | undefined>,
+  read?: (path: string) => string,
+): string[]
+// XREA_SERVERS_FILE があればそのファイルを読む。無ければ import した config/xrea-servers.json（ビルド時に埋め込まれる）
+// api.get("/api/servers", c => c.json({ servers })) は requireCredentials の前に登録する
+```
+
+| 項目    | 内容                                                                                           |
+| ------- | ---------------------------------------------------------------------------------------------- |
+| 形式    | `servers` が、空でない文字列（ホスト名の形式）の空でない配列                                   |
+| Workers | ファイルを読めないため、ビルド時に埋め込んだ一覧だけを使う                                     |
+| Node.js | XREA_SERVERS_FILE の指定時、起動のたびにファイルを読む（イメージの再作成なしで差し替えられる） |
 
 ## 3. エラー処理
 

@@ -158,6 +158,19 @@ describe.runIf(live)("compose", () => {
     }
   }, 180_000)
 
+  test("docker-deploy/AC-17: 設定ファイルのサーバ名を書き換えてアプリを再起動すると、サーバ名の一覧の応答が書き換えた内容になる", async () => {
+    const list = () => JSON.parse(inApp(`fetch("http://127.0.0.1:3000/api/servers").then(r=>r.text()).then(t=>console.log(t))`)).servers as string[]
+    expect(list()).toContain("s1.xrea.com")
+    expect(list().length).toBeGreaterThan(300)
+    // 書き換えた設定ファイルを重ねて、アプリのコンテナだけを作り直す（イメージは作り直さない）
+    const custom = path.join(tmpDir, "servers.json")
+    fs.writeFileSync(custom, JSON.stringify({ servers: ["x1.example.net", "x2.example.net"] }))
+    writeEnv({ XREA_SERVERS_CONFIG: custom })
+    compose("up -d --no-build --force-recreate app")
+    await waitHealthy(["app"], 60_000)
+    expect(list()).toEqual(["x1.example.net", "x2.example.net"])
+  }, 120_000)
+
   test.runIf(hasXrea)("docker-deploy/AC-12: 環境変数ファイルにSecure属性を外す指定があっても、トンネルを使う構成のアプリが Secure 付きのcookieを発行する", () => {
     const r = JSON.parse(inApp(registerJs(true)))
     expect(r.status).toBe(204)

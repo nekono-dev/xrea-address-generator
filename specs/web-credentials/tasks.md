@@ -28,3 +28,12 @@
 - [ ] T-3.4: 実機のパスワードマネージャで自動入力を確認し、手順と結果を記録する。
 - 検証: `npx vitest run tests/web/credentials.test.tsx && npx playwright test tests/e2e/credentials.spec.ts`
 - E2E: `tests/e2e/credentials.spec.ts` 登録済みで認証情報ボタンを押す → 登録画面が開き、取り消しで主画面に戻る
+
+## Phase 4: サーバ名の選択
+
+- 対応: D-6
+- [x] T-4.1: 候補つき入力部品を、検査と文言を差し替えられる形に一般化する。
+- [x] T-4.2: サーバ名の一覧の取得と、登録画面のサーバ名の欄への組み込みを実装する。
+- [x] T-4.3: 絞り込み・選択・一覧にない値・取得失敗の単体テストを、受け入れ条件のタグ付きで追加する。
+- 検証: `npx vitest run tests/web/credentials.test.tsx -t サーバ名`
+- E2E: `tests/e2e/credentials.spec.ts` サーバ名の欄に「s10」と入力する → 一覧が絞り込まれ、候補を選ぶと欄に入る

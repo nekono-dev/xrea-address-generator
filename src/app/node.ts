@@ -1,4 +1,5 @@
 // Node.jsの入口。設定の読み込み、組み立て、起動。
+import { readFileSync } from "node:fs"
 import { serve } from "@hono/node-server"
 import { Hono } from "hono"
 import { createNodeSqliteClient } from "../credentials/sqliteClient"
@@ -10,7 +11,7 @@ import { staticHandler } from "./static"
 async function main(): Promise<void> {
   let config
   try {
-    config = loadAppConfig(process.env)
+    config = loadAppConfig(process.env, { readFile: p => readFileSync(p, "utf8") })
   } catch (e) {
     if (e instanceof ConfigError) {
       console.error(e.message)

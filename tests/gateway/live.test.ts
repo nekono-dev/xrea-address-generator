@@ -18,10 +18,12 @@ describe.runIf(process.env.XREA_LIVE === "1")("実際のAPIに対する発行と
     const app = createGatewayApp({ registry: new Registry(), internalToken: TOKEN, logger: silentLogger, words: ["poc"] })
     const direct = new XreaClient(cfg)
     const before = (await direct.mailList()).length
+    const pause = () => new Promise(r => setTimeout(r, 1500)) // 別のクライアントとは送信間隔が共有されないため空ける
+    await pause()
     const made: string[] = []
     const call = (method: string, path: string, body?: object) => app.request(path, { method, headers, body: body && JSON.stringify(body) })
     try {
-      const named = (await (await call("POST", "/v1/aliases", { name: `poc-${Date.now().toString(36)}`, domain, forwardTo })).json()).alias
+      const r0 = await call("POST", "/v1/aliases", { name: `poc-${Date.now().toString(36)}`, domain, forwardTo }); const b0 = await r0.json(); if (!b0.alias) throw new Error(JSON.stringify(b0)); const named = b0.alias
       made.push(named.address)
       const random = (await (await call("POST", "/v1/aliases", { domain, forwardTo })).json()).alias
       made.push(random.address)
@@ -35,6 +37,7 @@ describe.runIf(process.env.XREA_LIVE === "1")("実際のAPIに対する発行と
     } finally {
       for (const a of made) await call("DELETE", `/v1/aliases/${encodeURIComponent(a)}`)
     }
+    await pause()
     const after = await direct.mailList()
     expect(after.some(m => m.address_name.startsWith("poc"))).toBe(false)
     expect(after.length).toBe(before)

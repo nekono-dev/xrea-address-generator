@@ -64,12 +64,11 @@ CMD ["node", "/app/dist/reader/main.js"]
 | アーキテクチャ | ビルド中の uname -m（x86_64・aarch64）で配布物を選ぶ。buildx の有無に依存しない |
 | 実行ユーザー   | node（非特権）                                                                  |
 
-### D-2: Docker Compose (FR-2, FR-3, FR-4, FR-6, FR-7, FR-9, FR-12, NFR-4)
+### D-2: Docker Compose (FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, FR-9, FR-12, NFR-4)
 
 ```yaml
 x-common: &common
-  restart: unless-stopped # 環境変数は .env（--env-file で変更可）から各サービスの environment へ補間する
-
+  restart: unless-stopped
 services:
   app:
     <<: *common
@@ -83,9 +82,10 @@ services:
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN を設定してください}
       CREDENTIAL_STORE: ${CREDENTIAL_STORE:-cookie}
       XREA_GATEWAY_URL: http://xrea-gateway:8081
-      PROTON_READER_URL: ${PROTON_READER_URL:-} # 空なら Proton Pass 連携を使わない
+      PROTON_READER_URL: ${PROTON_READER_URL:-}
       CREDENTIAL_DB_PATH: /var/lib/xrea-address-generator/data/sessions.db
-    volumes: [app-data:/var/lib/xrea-address-generator/data]
+      XREA_SERVERS_FILE: /app/config/xrea-servers.json
+    volumes: [app-data:/var/lib/xrea-address-generator/data, "${XREA_SERVERS_CONFIG:-./config/xrea-servers.json}:/app/config/xrea-servers.json:ro"]
     depends_on: { xrea-gateway: { condition: service_healthy } }
   xrea-gateway:
     <<: *common
@@ -112,18 +112,17 @@ volumes:
   reader-session:
 ```
 
-| 方針             | 内容                                                                                                                       |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| ポート           | compose.yaml のどのサービスにも ports を書かず、ホストへ公開しない                                                         |
-| 秘匿値の範囲     | 各サービスの environment に必要な変数だけを渡す。暗号化の秘密値はアプリにだけ、トンネルのトークンは cloudflared にだけ渡す |
-| 内部通信         | ゲートウェイと読み取りサービスは、Composeの内部ネットワークのサービス名でのみ接続できる                                    |
-| 永続化           | reader-session（Proton Passのセッション）と app-data（SQLite方式のときだけ使う）の2つの名前付きボリューム                  |
-| cookie の Secure | compose.yaml で COOKIE_SECURE を 1 に固定し、compose.lan.yaml だけが 0 に上書きする                                        |
-| トンネルの接続先 | Cloudflareの管理画面で、公開ホスト名の接続先を http://app:3000 にする                                                      |
+| 方針             | 内容                                                                                                                                               |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ポート           | compose.yaml のどのサービスにも ports を書かず、ホストへ公開しない。ゲートウェイと読み取りサービスは、内部ネットワークのサービス名でのみ接続できる |
+| 秘匿値の範囲     | 各サービスの environment に必要な変数だけを渡す。暗号化の秘密値はアプリにだけ、トンネルのトークンは cloudflared にだけ渡す                         |
+| サーバ名の一覧   | config/xrea-servers.json を読み取り専用で重ねる。書き換えてアプリを再起動すれば反映される                                                          |
+| 永続化           | reader-session（Proton Passのセッション）と app-data（SQLite方式のときだけ使う）の2つの名前付きボリューム                                          |
+| cookie の Secure | compose.yaml で COOKIE_SECURE を 1 に固定し、compose.lan.yaml だけが 0 に上書きする                                                                |
+| トンネルの接続先 | Cloudflareの管理画面で、公開ホスト名の接続先を http://app:3000 にする                                                                              |
 
 ```yaml
-# compose.lan.yaml（トンネルを使わないとき、compose.yaml に重ねて指定する）
-# docker compose -f compose.yaml -f compose.lan.yaml up -d
+# compose.lan.yaml: docker compose -f compose.yaml -f compose.lan.yaml up -d
 services:
   app:
     ports: ["${APP_PORT:-3000}:3000"] # ホスト側のポートは APP_PORT で変えられる

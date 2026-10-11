@@ -9,10 +9,13 @@ export type RegisterBody = {
 
 export const credentialsApi = {
   status: () => request<{ registered: boolean; proton?: boolean; expiresAt?: string }>("GET", "/api/credentials"),
+  servers: () => request<{ servers: string[] }>("GET", "/api/servers"),
   register: (b: RegisterBody) => request<void>("PUT", "/api/credentials", b),
 }
 
 /** 登録できる入力か。3項目がすべて空白以外を含む */
-export function canRegister(account: string, serverName: string, key: string): boolean {
-  return [account, serverName, key].every(v => v.trim() !== "")
+export function canRegister(account: string, serverName: string, key: string, servers: readonly string[] = []): boolean {
+  if (![account, serverName, key].every(v => v.trim() !== "")) return false
+  // 一覧を取得できなかったとき（空）は、自由入力で登録できる
+  return servers.length === 0 || servers.includes(serverName.trim())
 }

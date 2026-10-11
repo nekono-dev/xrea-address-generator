@@ -1,6 +1,7 @@
 // 環境変数（Workersでは環境の束縛）の読み込みと検証。入力は process.env と同じ形式の文字列の辞書。
 import { ConfigError, loadCredentialConfig, type CredentialConfig } from "../credentials/config"
 import { MIN_TOKEN_LENGTH } from "../shared/internalAuth"
+import { loadServers } from "./servers"
 
 export { ConfigError }
 
@@ -10,6 +11,8 @@ export type AppConfig = {
   /** 未設定ならProton Pass連携を使わない */
   readerUrl: string | null
   credentials: CredentialConfig
+  /** 登録画面のサーバ名の選択肢 */
+  servers: string[]
   bindAddress: string
   port: number
   logLevel: string
@@ -30,7 +33,7 @@ function url(env: Record<string, string | undefined>, name: string, required: bo
   return v.replace(/\/+$/, "")
 }
 
-export function loadAppConfig(env: Record<string, string | undefined>, opts: { allowSqlite?: boolean } = {}): AppConfig {
+export function loadAppConfig(env: Record<string, string | undefined>, opts: { allowSqlite?: boolean; readFile?: (path: string) => string } = {}): AppConfig {
   const allowSqlite = opts.allowSqlite ?? true
   const gatewayUrl = url(env, "XREA_GATEWAY_URL", true)!
   const internalToken = env.INTERNAL_TOKEN ?? ""
@@ -44,6 +47,7 @@ export function loadAppConfig(env: Record<string, string | undefined>, opts: { a
     internalToken,
     readerUrl: url(env, "PROTON_READER_URL", false),
     credentials,
+    servers: loadServers(env, opts.readFile),
     // トンネルを使わない（TUNNEL_TOKEN が未設定の）ときは、LANから接続できるよう全アドレスで待ち受ける
     bindAddress: env.BIND_ADDRESS || (env.TUNNEL_TOKEN ? "127.0.0.1" : "0.0.0.0"),
     port,

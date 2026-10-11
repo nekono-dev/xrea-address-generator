@@ -25,7 +25,7 @@ describe("環境変数の記入例", () => {
     const example = read(".env.example")
     const names = keys(example)
     for (const k of ["COOKIE_SECRET", "INTERNAL_TOKEN"]) expect(names).toContain(k)
-    for (const k of ["CREDENTIAL_STORE", "COMPOSE_PROFILES", "PROTON_READER_URL", "TUNNEL_TOKEN", "LOG_LEVEL", "APP_PORT"]) expect(example).toMatch(new RegExp(`^${k}=$`, "m"))
+    for (const k of ["CREDENTIAL_STORE", "COMPOSE_PROFILES", "PROTON_READER_URL", "TUNNEL_TOKEN", "LOG_LEVEL", "APP_PORT", "XREA_SERVERS_CONFIG"]) expect(example).toMatch(new RegExp(`^${k}=$`, "m"))
     // 旧方式の変数を残さない
     for (const k of ["XREA_ACCOUNT", "XREA_API_SECRET_KEY", "PROTON_PASS_PERSONAL_ACCESS_TOKEN"]) expect(names).not.toContain(k)
   })

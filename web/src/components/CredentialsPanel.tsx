@@ -1,7 +1,8 @@
 // 認証情報の登録画面。ダイアログではなく、画面内のパネルとして表示する。
-import { useState } from "preact/hooks"
+import { useEffect, useState } from "preact/hooks"
 import { ApiFailure } from "../api"
 import { canRegister, credentialsApi } from "../credentials"
+import { Combobox } from "./Combobox"
 
 const isImeEnter = (e: KeyboardEvent) => e.isComposing || e.keyCode === 229
 const INVALID_MESSAGE = "XREAの認証情報を確認できませんでした"
@@ -23,9 +24,19 @@ export function CredentialsPanel({
   const [key, setKey] = useState("")
   const [token, setToken] = useState("")
   const [proton, setProton] = useState(false)
+  const [servers, setServers] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(initialError ?? null)
-  const canSubmit = canRegister(account, serverName, key) && !busy
+  const canSubmit = canRegister(account, serverName, key, servers) && !busy
+  const badServer = servers.length > 0 && serverName.trim() !== "" && !servers.includes(serverName.trim())
+
+  // サーバ名の選択肢は表示時に1回取得する。失敗したときは自由入力にする
+  useEffect(() => {
+    credentialsApi
+      .servers()
+      .then(r => setServers(r.servers))
+      .catch(() => undefined)
+  }, [])
 
   async function submit(): Promise<void> {
     if (!canSubmit) return
@@ -60,10 +71,21 @@ export function CredentialsPanel({
             {notice}
           </p>
         )}
-        <label class="cred-field">
+        <div class="cred-field">
           <span>サーバ名</span>
-          <input class="fld" name="server" autoComplete="off" value={serverName} onInput={e => setServerName((e.target as HTMLInputElement).value)} onKeyDown={enterToSubmit} />
-        </label>
+          <Combobox
+            id="cred-server"
+            name="server"
+            label="サーバ名"
+            placeholder="検索して選択"
+            noneText="該当するサーバがありません"
+            candidates={servers}
+            value={serverName}
+            invalid={badServer}
+            onInput={setServerName}
+            onEnter={() => void submit()}
+          />
+        </div>
         <form
           class="cred-form"
           onSubmit={e => {

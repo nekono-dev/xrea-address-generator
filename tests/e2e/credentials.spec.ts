@@ -14,7 +14,8 @@ test.describe("登録と切り替え", () => {
     await expect(page.locator("#credentials")).toBeVisible()
     await expect(page.locator("#issue")).toHaveCount(0)
     await expect(page.locator(".row")).toHaveCount(0)
-    expect(api.requests.map(r => `${r.method} ${r.path}`)).toEqual(["GET /api/credentials"])
+    // サーバ名の選択肢の取得は、一覧の要求ではない
+    expect(api.requests.map(r => `${r.method} ${r.path}`).filter(r => r !== "GET /api/servers")).toEqual(["GET /api/credentials"])
   })
 
   test("web-credentials/AC-5: 3項目を入力して登録すると、登録画面が消えて一覧の取得の要求が送信される", async ({ page }) => {
@@ -136,5 +137,25 @@ test.describe("タッチ操作", () => {
     const sizes = await page.evaluate(() => [...document.querySelectorAll("#credentials input")].map(i => parseFloat(getComputedStyle(i).fontSize)))
     expect(sizes).toHaveLength(4)
     for (const s of sizes) expect(s).toBeGreaterThanOrEqual(16)
+  })
+})
+
+test.describe("サーバ名の選択", () => {
+  test("web-credentials/AC-14: サーバ名の欄に「s10」と入力すると、一覧が絞り込まれ、候補を選ぶと欄に入る", async ({ page }) => {
+    await mockApi(page, { registered: false })
+    await page.goto("/")
+    const server = page.locator('input[name="server"]')
+    await server.click()
+    await expect(page.locator("#cred-server [role=option]")).toHaveCount(4)
+    await server.fill("s10")
+    await expect(page.locator("#cred-server [role=option]")).toHaveText(["s10.xrea.com", "s100.xrea.com"])
+    await page.keyboard.press("ArrowDown")
+    await page.keyboard.press("Enter")
+    await expect(server).toHaveValue("s10.xrea.com")
+    await page.locator('input[name="username"]').fill("acct")
+    await page.locator('input[name="password"]').fill("key")
+    await expect(page.locator("#cred-submit")).toBeEnabled()
+    await server.fill("s999")
+    await expect(page.locator("#cred-submit")).toBeDisabled()
   })
 })

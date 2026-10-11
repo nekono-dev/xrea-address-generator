@@ -12,8 +12,8 @@ import { GatewayClient } from "./gatewayClient"
 import { ReaderClient } from "./readerClient"
 import { AppService } from "./service"
 
-export function createApi(deps: { service: AppService; store: CredentialStore; log: Logger }) {
-  const { service, store, log } = deps
+export function createApi(deps: { service: AppService; store: CredentialStore; log: Logger; servers: string[] }) {
+  const { service, store, log, servers } = deps
   const api = new Hono<CredentialEnv>()
 
   // ログはルート名・状態・所要時間・件数・エラーコードのみ（本文や認証情報、アドレスの一覧は出さない）
@@ -46,6 +46,7 @@ export function createApi(deps: { service: AppService; store: CredentialStore; l
 
   api.get("/healthz", c => c.json({ ok: true }))
 
+  api.get("/api/servers", c => c.json({ servers })) // 登録の前にも呼べる
   registerCredentialRoutes(api, { store, verify: service.verify }) // /api/credentials
   api.use("/api/*", requireCredentials(store)) // 以降の /api/* は登録済みの利用者だけ
   const creds = (c: Context<CredentialEnv>) => c.get("registration").credentials
@@ -102,5 +103,5 @@ export async function buildApi(config: AppConfig, opts: { db?: SqlClient; fetch?
   }
   const gateway = new GatewayClient(config.gatewayUrl, config.internalToken, opts.fetch)
   const reader = config.readerUrl ? new ReaderClient(config.readerUrl, config.internalToken, opts.fetch) : null
-  return createApi({ service: new AppService(gateway, reader), store, log: opts.log ?? consoleLogger })
+  return createApi({ service: new AppService(gateway, reader), store, log: opts.log ?? consoleLogger, servers: config.servers })
 }

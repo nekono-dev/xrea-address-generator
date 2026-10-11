@@ -35,7 +35,7 @@ describe("状態", () => {
     const { r, server } = await mountMissing()
     expect(r.container.querySelector("#issue")).toBeNull()
     expect(r.container.querySelector(".row")).toBeNull()
-    expect(server.requests.map(q => `${q.method} ${q.url}`)).toEqual(["GET /api/credentials"])
+    expect(server.requests.map(q => `${q.method} ${q.url}`).filter(q => q !== "GET /api/servers")).toEqual(["GET /api/credentials"])
   })
 
   test("登録状態を問い合わせている間は何も描画しない", async () => {
@@ -207,5 +207,41 @@ describe("置き換えと取り消し", () => {
     expect(r.container.querySelectorAll(".row").length).toBeGreaterThan(0)
     fireEvent.click(r.container.querySelector("#cred-open")!)
     expect(input(r.container, "username").value).toBe("") // 取り消し時の入力値は破棄する
+  })
+})
+
+describe("サーバ名", () => {
+  const options = (c: Element) => [...c.querySelectorAll("#cred-server [role=option]")].map(o => o.textContent)
+
+  test("web-credentials/AC-14: サーバ名の欄に文字を入力すると一覧が部分一致で絞り込まれ、候補を選ぶと欄に入る", async () => {
+    const { r } = await mountMissing()
+    await waitFor(() => expect(options(r.container)).toEqual(["s1.xrea.com", "s10.xrea.com", "s100.xrea.com", "s2.xrea.com"]))
+    type(r.container, "server", "S10")
+    expect(options(r.container)).toEqual(["s10.xrea.com", "s100.xrea.com"])
+    fireEvent.mouseDown(r.container.querySelector("#cred-server [role=option]")!)
+    expect(input(r.container, "server").value).toBe("s10.xrea.com")
+    expect(input(r.container, "server").getAttribute("autocomplete")).toBe("off")
+    // フォームの外に置く（パスワードマネージャの分類を崩さない）
+    expect(r.container.querySelector("form")!.contains(input(r.container, "server"))).toBe(false)
+  })
+
+  test("web-credentials/AC-15: 一覧にないサーバ名では登録ボタンが無効で、一覧の取得に失敗したときは自由入力で登録できる", async () => {
+    const { r } = await mountMissing()
+    await waitFor(() => expect(options(r.container).length).toBe(4))
+    fill(r.container)
+    expect(submitBtn(r.container).disabled).toBe(false)
+    type(r.container, "server", "s999.xrea.com")
+    expect(submitBtn(r.container).disabled).toBe(true)
+    expect(r.container.querySelector("#cred-server .none")!.textContent).toBe("該当するサーバがありません")
+    cleanup()
+    const server = fakeServer()
+    server.overrides["GET /api/credentials"] = () => missing
+    server.overrides["GET /api/servers"] = () => ({ status: 500, body: { error: { code: "internal_error", message: "x" } } })
+    const r2 = render(<App store={createStore()} />)
+    await waitFor(() => expect(r2.container.querySelector("#credentials")).not.toBeNull())
+    await waitFor(() => expect(server.requests.some(q => q.url === "/api/servers")).toBe(true))
+    fill(r2.container)
+    type(r2.container, "server", "anything.example.net")
+    expect(submitBtn(r2.container).disabled).toBe(false)
   })
 })

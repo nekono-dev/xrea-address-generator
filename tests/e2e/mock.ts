@@ -42,9 +42,11 @@ export async function mockApi(page: Page, init: { aliases?: Alias[]; proton?: Pr
     const json = (status: number, b?: unknown) => route.fulfill({ status, contentType: "application/json", body: b === undefined ? "" : JSON.stringify(b) })
     const key = `${req.method()} ${url.pathname.startsWith("/api/aliases/") ? "/api/aliases/:address" : url.pathname}`
     // 保護対象のAPIは、未登録（期限切れを含む）なら登録を求める
-    if (!state.registered && !url.pathname.startsWith("/api/credentials"))
+    if (!state.registered && !url.pathname.startsWith("/api/credentials") && url.pathname !== "/api/servers")
       return json(401, { error: { code: "credentials_required", message: "認証情報を登録してください" } })
     switch (key) {
+      case "GET /api/servers":
+        return json(200, { servers: ["s1.xrea.com", "s10.xrea.com", "s100.xrea.com", "s2.xrea.com"] })
       case "GET /api/credentials":
         return json(200, state.registered ? { registered: true, proton: true, expiresAt: "2026-10-18T00:00:00.000Z" } : { registered: false })
       case "PUT /api/credentials":

@@ -18,9 +18,12 @@ services:
       CREDENTIAL_DB_PATH: /var/lib/xrea-address-generator/data/sessions.db
       XREA_GATEWAY_URL: http://xrea-gateway:8081
       PROTON_READER_URL: ${PROTON_READER_URL:-} # 空なら Proton Pass 連携を使わない
+      XREA_SERVERS_FILE: /app/config/xrea-servers.json
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - app-data:/var/lib/xrea-address-generator/data
+      # サーバ名の一覧。書き換えてアプリを再起動すれば、イメージの再作成なしに反映される
+      - ${XREA_SERVERS_CONFIG:-./config/xrea-servers.json}:/app/config/xrea-servers.json:ro
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s

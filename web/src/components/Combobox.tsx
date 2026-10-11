@@ -4,9 +4,25 @@ import { useEffect, useRef, useState } from "preact/hooks"
 export const MAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const isInvalidMail = (v: string): boolean => v.trim() !== "" && !MAIL_RE.test(v.trim())
 
-type Props = { value: string; onInput: (v: string) => void; candidates: string[]; onEnter: () => void; onEscape?: () => void; label: string; id?: string; autoFocus?: boolean }
+type Props = {
+  value: string
+  onInput: (v: string) => void
+  candidates: string[]
+  onEnter: () => void
+  onEscape?: () => void
+  label: string
+  id?: string
+  autoFocus?: boolean
+  /** 入力欄の name 属性 */
+  name?: string
+  placeholder?: string
+  /** 誤りの判定。省略時はメールアドレスの形式の検査 */
+  invalid?: boolean
+  /** 該当する候補がないときの文言 */
+  noneText?: string
+}
 
-export function Combobox({ value, onInput, candidates, onEnter, onEscape, label, id, autoFocus }: Props) {
+export function Combobox({ value, onInput, candidates, onEnter, onEscape, label, id, autoFocus, name, placeholder, invalid: invalidProp, noneText }: Props) {
   const [open, setOpen] = useState(false)
   const [hi, setHi] = useState(-1)
   const [typed, setTyped] = useState(false) // 文字を入力したときだけ候補を絞り込む
@@ -14,7 +30,7 @@ export function Combobox({ value, onInput, candidates, onEnter, onEscape, label,
   const input = useRef<HTMLInputElement>(null)
   const q = value.trim().toLowerCase()
   const items = typed ? candidates.filter(c => c.toLowerCase().includes(q)) : candidates
-  const invalid = isInvalidMail(value)
+  const invalid = invalidProp ?? isInvalidMail(value)
 
   const quietFocus = useRef(false) // 自動のフォーカスでは候補を開かない（隣のボタンを隠さないため）
   useEffect(() => {
@@ -76,12 +92,13 @@ export function Combobox({ value, onInput, candidates, onEnter, onEscape, label,
       <input
         ref={input}
         class={`fld${invalid ? " bad" : ""}`}
+        name={name}
         role="combobox"
         aria-expanded={open}
         aria-autocomplete="list"
         aria-label={label}
         aria-invalid={invalid}
-        placeholder="選択、またはメールアドレスを入力"
+        placeholder={placeholder ?? "選択、またはメールアドレスを入力"}
         autocomplete="off"
         value={value}
         onFocus={() => {
@@ -129,7 +146,7 @@ export function Combobox({ value, onInput, candidates, onEnter, onEscape, label,
             </li>
           ))
         ) : (
-          <li class="none">候補なし（入力した値を使います）</li>
+          <li class="none">{noneText ?? "候補なし（入力した値を使います）"}</li>
         )}
       </ul>
     </div>
