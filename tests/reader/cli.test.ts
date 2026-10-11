@@ -2,8 +2,8 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { describe, expect, test } from "vitest"
-import { classify, cliEnv, CliError, createCliRunner, ForbiddenCommandError, isAllowed } from "../../src/proton/cli"
-import { Session } from "../../src/proton/session"
+import { classify, cliEnv, CliError, createCliRunner, ForbiddenCommandError, isAllowed } from "../../src/reader/cli"
+import { Session } from "../../src/reader/session"
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "proton-cli-"))
 
@@ -17,7 +17,7 @@ function fakeBin(body: string): { bin: string; log: string } {
 }
 
 describe("公式CLIの実行", () => {
-  test("proton-pass-reader/AC-6: 許可されていないサブコマンドの実行要求が拒否され、公式CLIは起動されない", async () => {
+  test("proton-pass-reader/AC-5: 許可されていないサブコマンドの実行要求が拒否され、公式CLIは起動されない", async () => {
     const f = fakeBin("exit 0")
     const run = createCliRunner({ token: "t", sessionDir: tmp(), bin: f.bin })
     for (const args of [["item", "create", "login"], ["item", "delete"], ["item", "update"], ["vault", "create"], ["vault", "delete"], ["logout"], ["item"], ["vault"]]) {

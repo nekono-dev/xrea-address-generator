@@ -1,9 +1,10 @@
 // 対応表のキャッシュ、再取得の合流、状態の管理。
+import { consoleLogger, type Logger } from "../shared/logger"
 import { CliError, FIXED_MESSAGES, ForbiddenCommandError, type CliRunner, type ErrorKind } from "./cli"
 import { mergeProjections, project, vaultShareIds, type AddressMap } from "./projection"
 import type { Session } from "./session"
 
-export type ReaderState = "loading" | "ready" | "relogin" | "error" | "disabled"
+export type ReaderState = "loading" | "ready" | "relogin" | "error"
 export type Status = {
   state: ReaderState
   updatedAt: string | null
@@ -11,20 +12,10 @@ export type Status = {
   itemCount: number | null
   error: { kind: ErrorKind; message: string } | null
 }
-export interface ProtonReader {
-  getMap(): AddressMap
-  getStatus(): Status
-  refresh(): Promise<void>
-}
-export type Logger = { info(o: object): void; warn(o: object): void }
 
 export const TTL_MS = 600_000
-const consoleLogger: Logger = {
-  info: o => console.log(JSON.stringify({ level: "info", ...o })),
-  warn: o => console.warn(JSON.stringify({ level: "warn", ...o })),
-}
 
-export class CachedReader implements ProtonReader {
+export class CachedReader {
   private map: AddressMap = new Map()
   private fetchedAt: number | null = null
   private inflight: Promise<void> | null = null
@@ -107,17 +98,4 @@ export class CachedReader implements ProtonReader {
       log.warn({ cmd: "item list", exitCode: 1, kind })
     }
   }
-}
-
-/** アクセストークンが未設定のときの連携の無効化。公式CLIを一切呼び出さない */
-export class DisabledReader implements ProtonReader {
-  getMap(): AddressMap {
-    return new Map()
-  }
-
-  getStatus(): Status {
-    return { state: "disabled", updatedAt: null, reloginAt: null, itemCount: null, error: null }
-  }
-
-  async refresh(): Promise<void> {}
 }

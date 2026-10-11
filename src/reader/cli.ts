@@ -28,7 +28,7 @@ export class CliError extends Error {
 }
 
 export const FIXED_MESSAGES: Record<ErrorKind, string> = {
-  token: "Proton Passのアクセストークンが無効か、期限切れです。トークンを差し替えて、サービスを再起動してください",
+  token: "Proton Passのアクセストークンが無効か、期限切れです。トークンを差し替えてください",
   permission: "Proton Passのアクセストークンに権限がありません",
   timeout: "Proton Pass CLIが60秒以内に応答しませんでした",
   cli: "Proton Pass CLIの実行に失敗しました",

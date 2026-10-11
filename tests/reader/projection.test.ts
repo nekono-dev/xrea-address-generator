@@ -1,9 +1,10 @@
 import fs from "node:fs"
 import path from "node:path"
 import { describe, expect, test } from "vitest"
-import { CachedReader, type Logger } from "../../src/proton/cache"
-import { project } from "../../src/proton/projection"
-import { Session } from "../../src/proton/session"
+import { CachedReader } from "../../src/reader/cache"
+import type { Logger } from "../../src/shared/logger"
+import { project } from "../../src/reader/projection"
+import { Session } from "../../src/reader/session"
 import { withVaults } from "./helpers"
 
 const fixture = fs.readFileSync(path.join(__dirname, "../fixtures/proton-items.json"), "utf8")
@@ -24,16 +25,16 @@ describe("対応表への変換", () => {
     expect(map.get("sns@example.com")).toContain("X (Twitter)") // メールアドレスが SNS@Example.com のアイテム
   })
 
-  test("proton-pass-reader/AC-4: 同一アドレスの2件のアイテムのエントリ名が、昇順で並んで保持される", () => {
+  test("proton-pass-reader/AC-3: 同一アドレスの2件のアイテムのエントリ名が、昇順で並んで保持される", () => {
     const { map } = project(fixture)
     expect(map.get("sns@example.com")).toEqual(["Bluesky", "X (Twitter)"])
     // ユーザー名とメールアドレスが同じアイテムは1回だけ数える
     expect(map.get("sns@example.com")!.filter(t => t === "Bluesky")).toHaveLength(1)
   })
 
-  test("proton-pass-reader/AC-5: パスワードを含む取得結果の処理後、対応表とログの出力にそのパスワード文字列が含まれない", async () => {
+  test("proton-pass-reader/AC-4: パスワードを含む取得結果の処理後、対応表とログの出力にそのパスワード文字列が含まれない", async () => {
     const lines: string[] = []
-    const logger: Logger = { info: o => lines.push(JSON.stringify(o)), warn: o => lines.push(JSON.stringify(o)) }
+    const logger: Logger = { info: o => lines.push(JSON.stringify(o)), warn: o => lines.push(JSON.stringify(o)), error: o => lines.push(JSON.stringify(o)) }
     const run = withVaults(async () => ({ stdout: fixture, durationMs: 5 }))
     const reader = new CachedReader({ run, session: new Session(run, "/tmp/unused"), logger })
     await reader.refresh()

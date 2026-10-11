@@ -1,5 +1,5 @@
 // Vault一覧の取得を差し込む、公式CLIの疑似実装の補助。
-import type { CliRunner } from "../../src/proton/cli"
+import type { CliRunner } from "../../src/reader/cli"
 
 /** Vault一覧の出力（共有IDは s0, s1, ...） */
 export const vaultsJson = (n = 1) =>

@@ -1,14 +1,14 @@
 import fs from "node:fs"
 import path from "node:path"
 import { describe, expect, test } from "vitest"
-import { CachedReader, DisabledReader, TTL_MS, type Status } from "../../src/proton/cache"
-import { CliError, FIXED_MESSAGES, type CliRunner } from "../../src/proton/cli"
-import { createProtonReader, loadProtonConfig } from "../../src/proton/index"
-import { Session } from "../../src/proton/session"
+import { CachedReader, TTL_MS, type Status } from "../../src/reader/cache"
+import { CliError, FIXED_MESSAGES, type CliRunner } from "../../src/reader/cli"
+import { silentLogger } from "../../src/shared/logger"
+import { Session } from "../../src/reader/session"
 import { vaultsJson, withVaults } from "./helpers"
 
 const fixture = fs.readFileSync(path.join(__dirname, "../fixtures/proton-items.json"), "utf8")
-const silent = { info: () => undefined, warn: () => undefined }
+const silent = silentLogger
 
 /** アイテム数を指定して、取得結果の文字列を作る */
 const itemsJson = (n: number, tag = "") =>
@@ -33,7 +33,7 @@ function setup(opts: { run?: CliRunner; now?: () => number } = {}) {
 }
 
 describe("キャッシュ", () => {
-  test("proton-pass-reader/AC-7: 有効期間内の2回目の取得で、公式CLIが呼び出されない", async () => {
+  test("proton-pass-reader/AC-6: 有効期間内の2回目の取得で、公式CLIが呼び出されない", async () => {
     const s = setup()
     await s.reader.refresh()
     expect(s.calls()).toBe(1)
@@ -42,7 +42,7 @@ describe("キャッシュ", () => {
     expect(s.calls()).toBe(1)
   })
 
-  test("proton-pass-reader/AC-13: 600秒が経過した後の取得で、再取得が開始される", async () => {
+  test("proton-pass-reader/AC-15: 600秒が経過した後の取得で、再取得が開始される", async () => {
     expect(TTL_MS).toBe(600_000)
     let t = 0
     const s = setup({ now: () => t })
@@ -56,7 +56,7 @@ describe("キャッシュ", () => {
     expect(s.calls()).toBe(2)
   })
 
-  test("proton-pass-reader/AC-8: 再取得の実行中に取得した対応表が、再取得前の内容になる", async () => {
+  test("proton-pass-reader/AC-7: 再取得の実行中に取得した対応表が、再取得前の内容になる", async () => {
     let release!: () => void
     let round = 0
     const run: CliRunner = async () => {
@@ -84,7 +84,7 @@ describe("キャッシュ", () => {
 })
 
 describe("状態と再ログイン", () => {
-  test("proton-pass-reader/AC-9: セッション失効の後に再ログインと再取得が行われ、再ログイン中を経て準備完了になり、時刻が記録される", async () => {
+  test("proton-pass-reader/AC-8: セッション失効の後に再ログインと再取得が行われ、再ログイン中を経て準備完了になり、時刻が記録される", async () => {
     const seen: string[] = []
     let first = true
     let reader!: CachedReader
@@ -109,7 +109,7 @@ describe("状態と再ログイン", () => {
     expect(s.reloginAt).toBe(s.updatedAt)
   })
 
-  test("proton-pass-reader/AC-10: 再取得中の状態取得は取得中を返し、完了後は最終更新時刻と参照件数を返す", async () => {
+  test("proton-pass-reader/AC-9: 再取得中の状態取得は取得中を返し、完了後は最終更新時刻と参照件数を返す", async () => {
     let release!: () => void
     const run: CliRunner = async () => {
       await new Promise<void>(r => (release = r))
@@ -129,7 +129,7 @@ describe("状態と再ログイン", () => {
     expect(s.error).toBeNull()
   })
 
-  test("proton-pass-reader/AC-14: 応答しない公式CLIが打ち切られた後、状態がエラーになり直前の対応表を保持する", async () => {
+  test("proton-pass-reader/AC-16: 応答しない公式CLIが打ち切られた後、状態がエラーになり直前の対応表を保持する", async () => {
     let round = 0
     const run: CliRunner = async () => {
       if (round++ === 0) return { stdout: fixture, durationMs: 1 }
@@ -160,7 +160,7 @@ describe("状態と再ログイン", () => {
 })
 
 describe("性能", () => {
-  test("proton-pass-reader/AC-11: 300件のアイテムを持つ一覧の再取得が、30秒以内に完了する", async () => {
+  test("proton-pass-reader/AC-13: 300件のアイテムを持つ一覧の再取得が、30秒以内に完了する", async () => {
     const json = itemsJson(300)
     const { reader } = setup({ run: async () => ({ stdout: json, durationMs: 1 }) })
     const start = performance.now()
@@ -169,7 +169,7 @@ describe("性能", () => {
     expect(reader.getMap().size).toBe(300)
   })
 
-  test("proton-pass-reader/AC-12: キャッシュが有効なときの対応表の取得が、50ミリ秒以内に完了する", async () => {
+  test("proton-pass-reader/AC-14: キャッシュが有効なときの対応表の取得が、50ミリ秒以内に完了する", async () => {
     const { reader } = setup({ run: async () => ({ stdout: itemsJson(300), durationMs: 1 }) })
     await reader.refresh()
     const start = performance.now()
@@ -180,7 +180,7 @@ describe("性能", () => {
 })
 
 describe("Vaultの探索と連携の無効化", () => {
-  test("proton-pass-reader/AC-15: トークンで参照できる複数のVaultのアイテムが、1つの対応表にまとまる", async () => {
+  test("proton-pass-reader/AC-2: トークンで参照できる複数のVaultのアイテムが、1つの対応表にまとまる", async () => {
     const calls: string[][] = []
     const run: CliRunner = async args => {
       calls.push(args)
@@ -205,26 +205,10 @@ describe("Vaultの探索と連携の無効化", () => {
     expect(reader.getMap().size).toBe(0)
     expect(reader.getStatus()).toMatchObject({ state: "ready", itemCount: 0 })
   })
-
-  test("proton-pass-reader/AC-16: アクセストークンが未設定なら連携が無効になり、公式CLIが起動されない", async () => {
-    expect(loadProtonConfig({})).toBeNull()
-    expect(loadProtonConfig({ PROTON_PASS_PERSONAL_ACCESS_TOKEN: "" })).toBeNull()
-    expect(loadProtonConfig({ PROTON_PASS_PERSONAL_ACCESS_TOKEN: "t" })).toEqual({ token: "t", sessionDir: "/var/lib/xrea-address-generator/session" })
-    const bin = path.join(fs.mkdtempSync("/tmp/proton-bin-"), "pass-cli")
-    fs.writeFileSync(`${bin}.called`, "no")
-    fs.writeFileSync(bin, `#!/bin/sh\necho yes > ${bin}.called\n`, { mode: 0o755 })
-    const reader = createProtonReader(null, { bin })
-    expect(reader).toBeInstanceOf(DisabledReader)
-    await reader.refresh()
-    expect(reader.getMap().size).toBe(0)
-    expect(reader.getStatus()).toEqual({ state: "disabled", updatedAt: null, reloginAt: null, itemCount: null, error: null })
-    await new Promise(r => setTimeout(r, 50))
-    expect(fs.readFileSync(`${bin}.called`, "utf8").trim()).toBe("no")
-  })
 })
 
 describe("取得に失敗した後", () => {
-  test("proton-pass-reader/AC-17: 取得に失敗した後は有効期間が過ぎても自動で再取得せず、無効なトークンでは差し替えを求める文言になる", async () => {
+  test("proton-pass-reader/AC-10: 取得に失敗した後は有効期間が過ぎても自動で再取得せず、無効なトークンでは差し替えを求める文言になる", async () => {
     let t = 0
     let round = 0
     const run: CliRunner = async args => {
