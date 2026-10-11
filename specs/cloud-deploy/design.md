@@ -19,7 +19,7 @@
 ```toml
 name = "xrea-address-generator"
 main = "dist/worker/index.js"
-compatibility_date = "2026-10-01"
+compatibility_date = "2026-08-01"
 
 [assets]
 directory = "dist/web"
@@ -91,7 +91,6 @@ export async function probe(env: {
   app: string
   gateway: string
   reader?: string
-  token: string
 }): Promise<Probe[]> {
   return [
     await get(`${env.app}/healthz`), // Workers

@@ -1,0 +1,16 @@
+# Cloudflare Workers の配備の定義。配備は手動で実行する: npm run build:worker && npm run build:web && npx wrangler deploy
+name = "xrea-address-generator"
+main = "dist/worker/index.js"
+compatibility_date = "2026-08-01"
+
+[assets]
+directory = "dist/web"
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/healthz"]
+not_found_handling = "none"   # 入口への切り替えは Worker が行う
+
+[vars]
+XREA_GATEWAY_URL = ""         # ゲートウェイのHTTPSのURL（配備時に設定）
+PROTON_READER_URL = ""        # 空なら Proton Pass 連携を使わない
+CREDENTIAL_STORE = "cookie"
+# 秘密（wrangler secret put で設定する。定義には書かない）: COOKIE_SECRET、INTERNAL_TOKEN
