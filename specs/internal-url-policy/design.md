@@ -29,7 +29,7 @@ export function allowsHttp(u: URL, policy: HttpPolicy): boolean {
 
 | 種別           | 許すホスト                                |
 | -------------- | ----------------------------------------- |
-| 同梱サービス名 | xrea-gateway、proton-reader               |
+| 同梱サービス名 | proton-reader                             |
 | ループバック   | localhost、127.0.0.0/8、[::1]             |
 | プライベート   | 10.0.0.0/8、172.16.0.0/12、192.168.0.0/16 |
 
@@ -40,7 +40,7 @@ IPv4は、ドット区切りの4つの0〜255の数字のときだけアドレ�
 ```ts
 // src/app/config.ts の loadAppConfig の opts に httpPolicy を加える（既定は "external"）
 loadAppConfig(env, { allowSqlite: false, httpPolicy: "all" }) // Workersの入口が渡す
-// XREA_GATEWAY_URL と PROTON_READER_URL を検査し、違反なら
+// PROTON_READER_URL を検査し、違反なら
 // throw new ConfigError(`${name} は${policy === "all" ? "https" : "https、または内部ネットワークのホストの http"} のURLにしてください`)
 ```
 

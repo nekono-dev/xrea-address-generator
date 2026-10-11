@@ -4,8 +4,8 @@
 
 | パス                               | 責務                                                                                      |
 | ---------------------------------- | ----------------------------------------------------------------------------------------- |
-| `Dockerfile`                       | アプリ・ゲートウェイ用イメージと、読み取りサービス用イメージの作成                        |
-| `compose.yaml`                     | 4サービス（アプリ、ゲートウェイ、読み取りサービス、Cloudflare Tunnel）の定義              |
+| `Dockerfile`                       | ゲートウェイ内蔵のアプリ用イメージと、読み取りサービス用イメージの作成                    |
+| `compose.yaml`                     | 3サービス（アプリ、読み取りサービス、Cloudflare Tunnel）の定義                            |
 | `compose.lan.yaml`                 | トンネルを使わないときの、アプリのポートの公開の追加定義                                  |
 | `.env.example`                     | 環境変数の記入例                                                                          |
 | `tests/docker/env.test.ts`         | 記入例の変数の網羅を確認するテスト                                                        |
@@ -21,14 +21,14 @@ WORKDIR /src
 COPY package*.json ./
 RUN npm ci
 COPY . .
-RUN npm run build            # dist/app・dist/gateway・dist/reader・dist/web を生成する
+RUN npm run build            # dist/app・dist/reader・dist/web を生成する
 
 FROM node:22-bookworm-slim AS deps
 WORKDIR /src
 COPY package*.json ./
 RUN npm ci --omit=dev        # 実行に必要な依存だけを取得する
 
-# アプリとゲートウェイ（同一イメージ。起動するコマンドだけが異なる）
+# アプリ（XREAゲートウェイを内蔵する）
 FROM node:22-bookworm-slim AS app
 COPY --from=build /src/dist /app/dist
 COPY --from=deps /src/node_modules /app/node_modules
@@ -79,26 +79,19 @@ services:
       BIND_ADDRESS: "0.0.0.0"
       COOKIE_SECURE: "1" # トンネル経由はHTTPSなので、環境変数ファイルの値によらず常に Secure を付ける
       COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET を設定してください}
-      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN を設定してください}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-} # 読み取りサービスを選ぶときだけ必須
       CREDENTIAL_STORE: ${CREDENTIAL_STORE:-cookie}
-      XREA_GATEWAY_URL: http://xrea-gateway:8081
       PROTON_READER_URL: ${PROTON_READER_URL:-}
       CREDENTIAL_DB_PATH: /var/lib/xrea-address-generator/data/sessions.db
       XREA_SERVERS_FILE: /app/config/xrea-servers.json
     volumes: [app-data:/var/lib/xrea-address-generator/data, "${XREA_SERVERS_CONFIG:-./config/xrea-servers.json}:/app/config/xrea-servers.json:ro"]
-    depends_on: { xrea-gateway: { condition: service_healthy } }
-  xrea-gateway:
-    <<: *common
-    image: xrea-address-generator:local
-    command: ["node", "/app/dist/gateway/main.js"]
-    environment: { PORT: "8081", BIND_ADDRESS: "0.0.0.0", INTERNAL_TOKEN: "${INTERNAL_TOKEN:?INTERNAL_TOKEN を設定してください}" }
     deploy: { replicas: 1 } # 直列化のため1インスタンスに固定する
   proton-reader:
     <<: *common
     profiles: [proton] # COMPOSE_PROFILES=proton のときだけ起動する
     build: { context: ., target: reader }
     image: xrea-address-generator-reader:local
-    environment: { PORT: "8082", BIND_ADDRESS: "0.0.0.0", SESSION_DIR: /var/lib/xrea-address-generator/session, INTERNAL_TOKEN: "${INTERNAL_TOKEN:?INTERNAL_TOKEN を設定してください}" }
+    environment: { PORT: "8082", BIND_ADDRESS: "0.0.0.0", SESSION_DIR: /var/lib/xrea-address-generator/session, INTERNAL_TOKEN: "${INTERNAL_TOKEN:-}" }
     volumes: [reader-session:/var/lib/xrea-address-generator/session]
   cloudflared:
     <<: *common
@@ -112,14 +105,14 @@ volumes:
   reader-session:
 ```
 
-| 方針             | 内容                                                                                                                                               |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ポート           | compose.yaml のどのサービスにも ports を書かず、ホストへ公開しない。ゲートウェイと読み取りサービスは、内部ネットワークのサービス名でのみ接続できる |
-| 秘匿値の範囲     | 各サービスの environment に必要な変数だけを渡す。暗号化の秘密値はアプリにだけ、トンネルのトークンは cloudflared にだけ渡す                         |
-| サーバ名の一覧   | config/xrea-servers.json を読み取り専用で重ねる。書き換えてアプリを再起動すれば反映される                                                          |
-| 永続化           | reader-session（Proton Passのセッション）と app-data（SQLite方式のときだけ使う）の2つの名前付きボリューム                                          |
-| cookie の Secure | compose.yaml で COOKIE_SECURE を 1 に固定し、compose.lan.yaml だけが 0 に上書きする                                                                |
-| トンネルの接続先 | Cloudflareの管理画面で、公開ホスト名の接続先を http://app:3000 にする                                                                              |
+| 方針             | 内容                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| ポート           | compose.yaml のどのサービスにも ports を書かず、ホストへ公開しない。読み取りサービスは、内部ネットワークのサービス名でのみ接続できる |
+| 秘匿値の範囲     | 各サービスの environment に必要な変数だけを渡す。暗号化の秘密値はアプリにだけ、トンネルのトークンは cloudflared にだけ渡す           |
+| サーバ名の一覧   | config/xrea-servers.json を読み取り専用で重ねる。書き換えてアプリを再起動すれば反映される                                            |
+| 永続化           | reader-session（Proton Passのセッション）と app-data（SQLite方式のときだけ使う）の2つの名前付きボリューム                            |
+| cookie の Secure | compose.yaml で COOKIE_SECURE を 1 に固定し、compose.lan.yaml だけが 0 に上書きする                                                  |
+| トンネルの接続先 | Cloudflareの管理画面で、公開ホスト名の接続先を http://app:3000 にする                                                                |
 
 ```yaml
 # compose.lan.yaml: docker compose -f compose.yaml -f compose.lan.yaml up -d
@@ -131,22 +124,22 @@ services:
 
 ### D-3: 環境変数の記入例 (FR-5, FR-10)
 
-| 変数              | 必須 | 既定値 | 内容                                                                 |
-| ----------------- | ---- | ------ | -------------------------------------------------------------------- |
-| COOKIE_SECRET     | 必須 | なし   | 32文字以上。認証情報の暗号化の鍵の導出に使う                         |
-| INTERNAL_TOKEN    | 必須 | なし   | 32文字以上。アプリとゲートウェイ・読み取りサービスの共有シークレット |
-| CREDENTIAL_STORE  | 任意 | cookie | cookie または sqlite                                                 |
-| COMPOSE_PROFILES  | 任意 | 空     | proton を指定すると読み取りサービスを起動する                        |
-| PROTON_READER_URL | 任意 | 空     | proton を選ぶときは http://proton-reader:8082                        |
-| TUNNEL_TOKEN      | 任意 | なし   | Cloudflare Tunnelのトークン。空ならトンネルを使わない                |
-| LOG_LEVEL         | 任意 | info   | ログの詳細度                                                         |
-| APP_PORT          | 任意 | 3000   | LAN用の追加定義で公開するホスト側のポート                            |
+| 変数              | 必須     | 既定値 | 内容                                                                                       |
+| ----------------- | -------- | ------ | ------------------------------------------------------------------------------------------ |
+| COOKIE_SECRET     | 必須     | なし   | 32文字以上。認証情報の暗号化の鍵の導出に使う                                               |
+| INTERNAL_TOKEN    | 条件付き | なし   | 32文字以上。読み取りサービスを選ぶときだけ必須。アプリと読み取りサービスの共有シークレット |
+| CREDENTIAL_STORE  | 任意     | cookie | cookie または sqlite                                                                       |
+| COMPOSE_PROFILES  | 任意     | 空     | proton を指定すると読み取りサービスを起動する                                              |
+| PROTON_READER_URL | 任意     | 空     | proton を選ぶときは http://proton-reader:8082                                              |
+| TUNNEL_TOKEN      | 任意     | なし   | Cloudflare Tunnelのトークン。空ならトンネルを使わない                                      |
+| LOG_LEVEL         | 任意     | info   | ログの詳細度                                                                               |
+| APP_PORT          | 任意     | 3000   | LAN用の追加定義で公開するホスト側のポート                                                  |
 
-記入例のファイルには、上の全変数を並べ、必須の値は空にする。実際の値を入れた環境変数ファイルは、リポジトリへ含めない。Compose の定義では、必須の2変数を `${COOKIE_SECRET:?COOKIE_SECRET を設定してください}` の形で参照し、空のときは起動を拒否する。
+記入例のファイルには、上の全変数を並べ、必須の値は空にする。実際の値を入れた環境変数ファイルは、リポジトリへ含めない。Compose の定義では、`${COOKIE_SECRET:?COOKIE_SECRET を設定してください}` の形で必須の変数を参照し、空のときは起動を拒否する。共有シークレットは、読み取りサービスのURLがあるのに32文字未満のとき、アプリが変数名を示して起動に失敗する。
 
 ```sh
 # tests/docker/env.test.ts の中核（同じ判定を TypeScript で行う）: 必須の変数がすべて記入例に含まれる
-for k in COOKIE_SECRET INTERNAL_TOKEN; do
+for k in COOKIE_SECRET; do
   grep -q "^$k=" .env.example || { echo "不足: $k"; exit 1; }
 done
 ```
@@ -156,7 +149,6 @@ done
 | サービス      | 死活確認                                 | 間隔・失敗回数 |
 | ------------- | ---------------------------------------- | -------------- |
 | app           | GET http://127.0.0.1:3000/healthz が 200 | 10秒・3回      |
-| xrea-gateway  | GET http://127.0.0.1:8081/healthz が 200 | 10秒・3回      |
 | proton-reader | GET http://127.0.0.1:8082/healthz が 200 | 10秒・3回      |
 
 ```yaml
@@ -178,14 +170,14 @@ healthcheck:
 ### D-5: 権限の制限 (FR-11)
 
 ```yaml
-# xrea-gateway と proton-reader に付ける
+# app と proton-reader に付ける。app の書き込み先は app-data のボリュームだけ
 read_only: true
 cap_drop: [ALL]
 security_opt: ["no-new-privileges:true"]
 tmpfs: ["/tmp"]
 ```
 
-読み取りサービスの書き込み先は、セッションの名前付きボリュームと /tmp のみとする。
+読み取りサービスの書き込み先は、セッションの名前付きボリュームと /tmp のみとする。アプリの書き込み先は、SQLite方式の名前付きボリュームと /tmp のみとする。
 
 ## 3. エラー処理
 

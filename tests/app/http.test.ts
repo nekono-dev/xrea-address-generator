@@ -65,12 +65,20 @@ describe("認証の前段", () => {
 describe("設定", () => {
   test("必須の環境変数が未設定なら、不足している変数名を示す", () => {
     expect(() => loadAppConfig({})).toThrow(ConfigError)
-    expect(() => loadAppConfig({ ...ENV, XREA_GATEWAY_URL: "" })).toThrow("XREA_GATEWAY_URL")
     expect(() => loadAppConfig({ ...ENV, INTERNAL_TOKEN: "short" })).toThrow("INTERNAL_TOKEN")
     expect(() => loadAppConfig({ ...ENV, COOKIE_SECRET: "short" })).toThrow("COOKIE_SECRET")
-    expect(() => loadAppConfig({ ...ENV, XREA_GATEWAY_URL: "ftp://x" })).toThrow(ConfigError)
+    expect(() => loadAppConfig({ ...ENV, PROTON_READER_URL: "ftp://x" })).toThrow(ConfigError)
     expect(() => loadAppConfig({ ...ENV, CREDENTIAL_STORE: "sqlite" }, { allowSqlite: false })).toThrow(ConfigError)
-    expect(loadAppConfig({ ...ENV, XREA_GATEWAY_URL: "http://xrea-gateway:8081/" }).gatewayUrl).toBe("http://xrea-gateway:8081")
+    expect(loadAppConfig({ ...ENV, PROTON_READER_URL: "http://proton-reader:8082/" }).readerUrl).toBe("http://proton-reader:8082")
+  })
+
+  test("alias-service/AC-26: 読み取りサービスのURLが未設定なら共有シークレットが未設定でも設定の読み込みが成功し、設定があり32文字未満なら失敗する", () => {
+    const base = { COOKIE_SECRET: "c".repeat(40) }
+    expect(() => loadAppConfig(base)).not.toThrow()
+    expect(() => loadAppConfig({ ...base, INTERNAL_TOKEN: "short" })).not.toThrow()
+    expect(() => loadAppConfig({ ...base, PROTON_READER_URL: "https://reader.example.net" })).toThrow("INTERNAL_TOKEN")
+    expect(() => loadAppConfig({ ...base, PROTON_READER_URL: "https://reader.example.net", INTERNAL_TOKEN: "short" })).toThrow("INTERNAL_TOKEN")
+    expect(() => loadAppConfig({ ...base, PROTON_READER_URL: "https://reader.example.net", INTERNAL_TOKEN: "i".repeat(32) })).not.toThrow()
   })
 
   test("alias-service/AC-11: TUNNEL_TOKEN が未設定または空なら全アドレス、設定があれば自アドレスのみで待ち受け、明示はそれらに優先する", () => {

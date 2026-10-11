@@ -15,26 +15,26 @@ XREA のメール転送アドレス（エイリアス）を、ワンボタンで
 
 ## 構成
 
-3つのコンポーネントに分けています。クラウドでもセルフホストでも同じ構成です。
+`app`（XREA ゲートウェイを内蔵）と、任意の `proton-reader` の2つに分けています。クラウドでもセルフホストでも同じ構成です。
 
 ```
-ブラウザ → app ─→ xrea-gateway ─→ XREA API
+ブラウザ → app（ゲートウェイ内蔵）─→ XREA API
              └──→ proton-reader ─→ Proton Pass（任意）
 ```
 
 | コンポーネント | 役割 | 動かす場所 |
 | --- | --- | --- |
-| `app` | 画面の配信と HTTP API。無状態で、認証情報の cookie を復号して内部サービスへ中継する | Cloudflare Workers、または Node.js のコンテナ |
-| `xrea-gateway` | XREA への要求をアカウントごとに直列化する（1秒間隔の制限を守る）。**最大1インスタンス** | コンテナ |
-| `proton-reader` | 公式 CLI（`pass-cli`）で Proton Pass を読み、アドレス→エントリ名の対応表だけを返す。使わなければ配備しない | コンテナ |
+| `app` | 画面の配信と HTTP API。認証情報の cookie を復号し、内蔵のゲートウェイへ中継する | Cloudflare Workers、または Node.js のコンテナ |
+| ゲートウェイ（`app` に内蔵） | XREA への要求をアカウントごとに直列化する（1秒間隔の制限を守る）。Workers ではアカウントごとの Durable Object、Node.js では同一プロセス | `app` と同じ |
+| `proton-reader` | 公式 CLI（`pass-cli`）で Proton Pass を読み、アドレス→エントリ名の対応表だけを返す。使わなければ配備しない。**最大1インスタンス** | コンテナ |
 
 | ディレクトリ | 内容 |
 | --- | --- |
 | `src/app` | `app` の API・中継・画面の配信と、Node.js・Workers の入口 |
 | `src/credentials` | 認証情報の暗号化・cookie 方式・SQL 方式・登録のルート |
-| `src/gateway` | `xrea-gateway` |
+| `src/gateway` | XREA ゲートウェイ（`app` に内蔵。Durable Object の入口と DNS over HTTPS を含む） |
 | `src/reader` | `proton-reader`（公式 CLI の実行、トークンごとのセッション分離、対応表） |
-| `src/shared` | エラーコード・ログ・内部の共有シークレットの検査 |
+| `src/shared` | エラーコード・ログ・読み取りサービスの共有シークレットの検査 |
 | `src/xrea` | XREA API の型付きクライアント（公式ドキュメントから生成した OpenAPI に基づく） |
 | `web` | 画面（Preact。ブラウザ標準の部品は使わず、すべて独自の部品で構成）と、PWA の宣言・アイコン・Service Worker |
 | `api` | 公式ドキュメントの基準・補正定義・生成した OpenAPI |
@@ -54,17 +54,17 @@ XREA のメール転送アドレス（エイリアス）を、ワンボタンで
      --vault-name "<照合に使うVault名>" --role viewer
    ```
    アプリは Vault の名前を指定せず、このトークンで参照できるすべての Vault を調べます。照合の対象は、ここで権限を与えた Vault で決まります。
-3. **サーバの秘密値 2つ**: `COOKIE_SECRET`（認証情報を暗号化する鍵の元）と `INTERNAL_TOKEN`（内部サービスの共有シークレット）。どちらも 32 文字以上で、`openssl rand -base64 48` などで作ります。
+3. **サーバの秘密値**: `COOKIE_SECRET`（認証情報を暗号化する鍵の元）。Proton Pass 連携を使うときは `INTERNAL_TOKEN`（読み取りサービスとの共有シークレット）も要ります。どちらも 32 文字以上で、`openssl rand -base64 48` などで作ります。
 4. **Cloudflare Tunnel のトークン**（省略すると、トンネルを使わず LAN に公開します）: 公開ホスト名の接続先は、Docker 構成では `http://app:3000` にします。アクセス制御は Cloudflare Access で行ってください（アプリ自身は利用者の認証を持ちません）。PWA の宣言は Cloudflare Access の認証情報を付けて取得するよう指定しています。
 
 ## Docker で動かす（セルフホスト）
 
 ```sh
-cp .env.example .env   # COOKIE_SECRET と INTERNAL_TOKEN を記入する（このファイルはリポジトリに含めない）
+cp .env.example .env   # COOKIE_SECRET を記入する（Proton Pass 連携を使うときは INTERNAL_TOKEN も）（このファイルはリポジトリに含めない）
 docker compose up -d
 ```
 
-起動するのは `app`・`xrea-gateway`・`cloudflared` の3つです。ホストへポートは公開しません。`TUNNEL_TOKEN` を空にすると、`cloudflared` は起動しません。
+起動するのは `app`（ゲートウェイ内蔵）と `cloudflared` の2つです。ホストへポートは公開しません。`TUNNEL_TOKEN` を空にすると、`cloudflared` は起動しません。
 
 Proton Pass 連携を使うときは、`.env` に次を書いて `proton-reader` も起動します。
 
@@ -73,7 +73,7 @@ COMPOSE_PROFILES=proton
 PROTON_READER_URL=http://proton-reader:8082
 ```
 
-`proton-reader` のセッションの保存先（名前付きボリューム）だけを永続化します（`CREDENTIAL_STORE=sqlite` のときは、SQLite 用のボリュームも使います）。ゲートウェイと読み取りサービスは、読み取り専用のルートファイルシステム・非特権ユーザー・全権限の放棄で動かします。
+`proton-reader` のセッションの保存先（名前付きボリューム）だけを永続化します（`CREDENTIAL_STORE=sqlite` のときは、SQLite 用のボリュームも使います）。`app` と読み取りサービスは、読み取り専用のルートファイルシステム・非特権ユーザー・全権限の放棄で動かします（`app` の書き込み先は SQLite 用のボリュームと `/tmp` だけです）。
 
 トンネルを使わず LAN だけで使うときは、追加の定義でアプリのポートを公開します。HTTP でも cookie を保持できるよう、この定義だけ cookie の `Secure` 属性を外します。信頼できる LAN でのみ使ってください。ホスト側のポートは `APP_PORT`（既定 3000）で変えられます。
 
@@ -85,7 +85,7 @@ docker compose -f compose.yaml -f compose.lan.yaml up -d
 
 ## クラウドに載せる
 
-`app` を Cloudflare Workers の無料枠へ、`xrea-gateway`（と任意で `proton-reader`）を任意のコンテナ基盤へ配備します。事前準備のあと、`npm run deploy:cloud` で構成例のすべてを一括で配備できます（手動の手順もあります）。撤去は `npm run destroy:cloud` です。詳細は [docs/cloud-deploy.md](docs/cloud-deploy.md) を参照してください。配備後の疎通確認は `npx tsx scripts/cloud/check.ts probe` で行えます。配備後の運用（保持方式、秘密値の更新、失効）は [docs/cloud-operations.md](docs/cloud-operations.md) を参照してください。
+`app`（ゲートウェイは同じ Worker の Durable Object）を Cloudflare Workers の無料枠へ配備します。任意の `proton-reader` だけを任意のコンテナ基盤へ配備します（使わなければ Google Cloud は不要です）。事前準備のあと、`npm run deploy:cloud` で構成例のすべてを一括で配備できます（手動の手順もあります）。撤去は `npm run destroy:cloud` です。詳細は [docs/cloud-deploy.md](docs/cloud-deploy.md) を参照してください。配備後の疎通確認は `npx tsx scripts/cloud/check.ts probe` で行えます。配備後の運用（保持方式、秘密値の更新、失効）は [docs/cloud-operations.md](docs/cloud-operations.md) を参照してください。
 
 ## 環境変数
 
@@ -94,9 +94,8 @@ docker compose -f compose.yaml -f compose.lan.yaml up -d
 | 変数 | 必須 | 既定値 | 内容 |
 | --- | --- | --- | --- |
 | `COOKIE_SECRET` | 必須 | | 32 文字以上。認証情報の暗号化の鍵を導出する |
-| `INTERNAL_TOKEN` | 必須 | | 32 文字以上。内部サービスとの共有シークレット |
-| `XREA_GATEWAY_URL` | 必須 | | `xrea-gateway` の URL（Docker では未設定なら compose が `http://xrea-gateway:8081` を設定する）。Workers は https のみ。Node.js/Docker は https のほか、`xrea-gateway`・`proton-reader`・`localhost`・プライベートIP（10/8、172.16/12、192.168/16）への http だけを許す |
-| `PROTON_READER_URL` | 任意 | | `proton-reader` の URL。空なら Proton Pass 連携を使わない。通信方式の制限は `XREA_GATEWAY_URL` と同じ |
+| `INTERNAL_TOKEN` | 条件付き | | 32 文字以上。`PROTON_READER_URL` を設定するときだけ必須。読み取りサービスとの共有シークレット |
+| `PROTON_READER_URL` | 任意 | | `proton-reader` の URL。空なら Proton Pass 連携を使わない。Workers は https のみ。Node.js/Docker は https のほか、`proton-reader`・`localhost`・プライベートIP（10/8、172.16/12、192.168/16）への http だけを許す |
 | `CREDENTIAL_STORE` | 任意 | `cookie` | `cookie` または `sqlite`（Workers は `cookie` のみ） |
 | `CREDENTIAL_DB_PATH` | 任意 | `/var/lib/xrea-address-generator/sessions.db` | `sqlite` のときの保存先 |
 | `COOKIE_SECURE` | 任意 | `1` | `0` で cookie の `Secure` 属性を外す（LAN の HTTP 公開用） |
@@ -104,8 +103,6 @@ docker compose -f compose.yaml -f compose.lan.yaml up -d
 | `BIND_ADDRESS` | 任意 | `0.0.0.0`（`TUNNEL_TOKEN` があれば `127.0.0.1`） | 待ち受けるアドレス |
 | `PORT` | 任意 | `3000` | 待ち受けるポート |
 | `LOG_LEVEL` | 任意 | `info` | ログの詳細度 |
-
-`xrea-gateway`: `INTERNAL_TOKEN`（必須）、`PORT`（既定 8081）、`BIND_ADDRESS`、`LOG_LEVEL`。
 
 `proton-reader`: `INTERNAL_TOKEN`（必須）、`SESSION_DIR`（既定 `/var/lib/xrea-address-generator/session`）、`MAX_TENANTS`（既定 20）、`PORT`（既定 8082）、`BIND_ADDRESS`、`LOG_LEVEL`。
 
@@ -127,7 +124,7 @@ npm ci
 npm run dev
 ```
 
-ゲートウェイ（8081）・アプリ（3000）・読み取りサービス（8082）・Vite（5173）がまとまって起動します。ブラウザで `http://<ホストのアドレス>:5173` を開いてください。Ctrl+C で全て終了します。
+アプリ（3000。ゲートウェイを内蔵）・読み取りサービス（8082）・Vite（5173）がまとまって起動します。ブラウザで `http://<ホストのアドレス>:5173` を開いてください。Ctrl+C で全て終了します。
 
 - `/api` は Vite からアプリへ転送されます。Vite だけが `0.0.0.0` で待ち受け、ほかは固定の開発用トークンを使うため `127.0.0.1` に限ります。
 - 秘密値は開発専用の固定値です。`INTERNAL_TOKEN`・`COOKIE_SECRET` で上書きできます。
@@ -146,7 +143,7 @@ npm run lint:spec        # 仕様書の検査
 ### 4. ビルドする
 
 ```sh
-npm run build            # dist/app・dist/gateway・dist/reader・dist/worker・dist/web を生成
+npm run build            # dist/app・dist/reader・dist/worker・dist/web を生成
 npx tsx scripts/icons.ts # アイコンの原画（web/icon.svg）から PWA のアイコンを書き出す（アイコンを変えたときだけ）
 ```
 

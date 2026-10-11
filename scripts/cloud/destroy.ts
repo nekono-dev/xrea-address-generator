@@ -5,19 +5,19 @@
 import { spawnSync } from "node:child_process"
 import { existsSync } from "node:fs"
 import { createInterface } from "node:readline/promises"
-import { must, realRunner, GATEWAY_SERVICE, READER_SERVICE, type Runner } from "./deploy"
+import { must, realRunner, READER_SERVICE, type Runner } from "./deploy"
 
+/** projectId が空のときは Google Cloud に触れない（読み取りサービスを配備していない構成） */
 export type DestroyConfig = { projectId: string; region: string; repo: string; wranglerConfig: string; dryRun: boolean; yes: boolean }
 
 /** Secret Manager の共有シークレットと、運用手順で作る COOKIE_SECRET の控え */
 export const SECRETS = ["xrea-internal-token", "xrea-cookie-secret"]
 
 export function loadDestroyConfig(env: NodeJS.ProcessEnv, argv: string[], exists: (p: string) => boolean = existsSync): DestroyConfig {
-  if (!env.PROJECT_ID) throw new Error("環境変数 PROJECT_ID（Google Cloud のプロジェクトID）を設定してください")
   if (!env.CLOUDFLARE_ACCOUNT_ID) throw new Error("環境変数 CLOUDFLARE_ACCOUNT_ID（Cloudflare のアカウントID）を設定してください")
   for (const a of argv) if (!["--yes", "--dry-run"].includes(a)) throw new Error(`不明な引数です: ${a}（使えるのは --yes、--dry-run）`)
   return {
-    projectId: env.PROJECT_ID,
+    projectId: env.PROJECT_ID ?? "",
     region: env.REGION || "asia-northeast1",
     repo: "xrea",
     wranglerConfig: exists("wrangler.jsonc") ? "wrangler.jsonc" : "wrangler.template.jsonc",
@@ -26,7 +26,7 @@ export function loadDestroyConfig(env: NodeJS.ProcessEnv, argv: string[], exists
   }
 }
 
-/** Workers → Cloud Run → Artifact Registry → Secret Manager の順に撤去する。入口（Workers）を先に落とす */
+/** Workers → Cloud Run（読み取りサービス）→ Artifact Registry → Secret Manager の順に撤去する。入口（Workers）を先に落とす */
 export function destroy(c: DestroyConfig, r: Runner): void {
   r.log("app（Workers）を削除（スクリプト、秘密、画面ファイル）")
   if (r.query({ cmd: "npx", args: ["wrangler", "deployments", "list", "--config", c.wranglerConfig] }).code === 0) {
@@ -35,11 +35,14 @@ export function destroy(c: DestroyConfig, r: Runner): void {
     r.log("Workers は存在しません")
   }
 
-  for (const service of [GATEWAY_SERVICE, READER_SERVICE]) {
-    r.log(`${service} を削除`)
-    if (r.query({ cmd: "gcloud", args: ["run", "services", "describe", service, "--region", c.region] }).code === 0) {
-      must(r.exec({ cmd: "gcloud", args: ["run", "services", "delete", service, "--region", c.region, "--quiet"] }), `${service} の削除`)
-    }
+  if (!c.projectId) {
+    r.log("PROJECT_ID が未設定のため、Google Cloud は撤去しません")
+    return
+  }
+
+  r.log(`${READER_SERVICE} を削除`)
+  if (r.query({ cmd: "gcloud", args: ["run", "services", "describe", READER_SERVICE, "--region", c.region] }).code === 0) {
+    must(r.exec({ cmd: "gcloud", args: ["run", "services", "delete", READER_SERVICE, "--region", c.region, "--quiet"] }), `${READER_SERVICE} の削除`)
   }
 
   r.log(`Artifact Registry のリポジトリ ${c.repo}（イメージごと）を削除`)
@@ -68,11 +71,13 @@ function removeLocalImages(c: DestroyConfig, dryRun: boolean): void {
 async function confirm(c: DestroyConfig): Promise<boolean> {
   if (c.yes || c.dryRun) return true
   if (!process.stdin.isTTY) return false
-  console.log(`プロジェクト ${c.projectId} の xrea-gateway・proton-reader・イメージ・共有シークレットと、Workers（登録済みの認証情報を含む）を削除します。元に戻せません。`)
+  const target = c.projectId ? `プロジェクト ${c.projectId} の proton-reader・イメージ・共有シークレットと、` : ""
+  console.log(`${target}Workers（登録済みの認証情報を含む）を削除します。元に戻せません。`)
   const rl = createInterface({ input: process.stdin, output: process.stdout })
-  const answer = await rl.question("続けるには PROJECT_ID を入力してください: ")
+  const expected = c.projectId || "delete"
+  const answer = await rl.question(`続けるには ${c.projectId ? "PROJECT_ID" : "delete"} を入力してください: `)
   rl.close()
-  return answer.trim() === c.projectId
+  return answer.trim() === expected
 }
 
 async function main(argv: string[]): Promise<number> {

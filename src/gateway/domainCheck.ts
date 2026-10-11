@@ -1,5 +1,4 @@
 // 候補にないドメインの確認。XREAは未登録のドメインでもアドレスの作成を受理するため、MXがXREAのサーバを指すことをDNSで確かめる。
-import dns from "node:dns/promises"
 import { AppError } from "../shared/errors"
 
 export type Resolver = {
@@ -17,7 +16,7 @@ async function lookup<T>(f: () => Promise<T[]>): Promise<T[]> {
   try {
     return await f()
   } catch (e) {
-    if (ABSENT.includes((e as NodeJS.ErrnoException).code ?? "")) return []
+    if (ABSENT.includes((e as { code?: string }).code ?? "")) return []
     throw e
   }
 }
@@ -26,7 +25,7 @@ const addresses = async (r: Resolver, host: string): Promise<string[]> =>
   (await Promise.all([lookup(() => r.resolve4(host)), lookup(() => r.resolve6(host))])).flat()
 
 /** ドメインのMX（無ければドメイン自身）の向き先が、XREAのサーバのIPアドレスのいずれかと一致するか */
-export function mxCheck(resolver: Resolver = dns): DomainCheck {
+export function mxCheck(resolver: Resolver): DomainCheck {
   return async (domain, serverName) => {
     try {
       const server = new Set(await addresses(resolver, serverName))

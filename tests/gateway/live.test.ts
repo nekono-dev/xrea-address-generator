@@ -2,20 +2,21 @@
 // 作成するのは poc で始まる名前だけで、作成したアドレスは必ず削除する。
 import { describe, expect, test } from "vitest"
 import { createGatewayApp } from "../../src/gateway/app"
+import { mxCheck } from "../../src/gateway/domainCheck"
+import { nodeResolver } from "../../src/gateway/nodeResolver"
 import { Registry } from "../../src/gateway/registry"
 import { silentLogger } from "../../src/shared/logger"
 import { createParam, loadXreaConfig, XreaClient } from "../../src/xrea/client"
 
 const domain = process.env.XREA_POC_DOMAIN ?? ""
 const forwardTo = process.env.XREA_POC_FORWARD_TO ?? ""
-const TOKEN = "t".repeat(32)
 
 describe.runIf(process.env.XREA_LIVE === "1")("実際のAPIに対する発行と削除", () => {
   test("xrea-gateway/AC-4: 発行し、転送先を変更して削除すると、検証用アドレスが残らない", async () => {
     await new Promise(r => setTimeout(r, 1500)) // 直前に実行した別のテストの送信から間隔を空ける
     const cfg = loadXreaConfig()
-    const headers = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json", "x-xrea-account": cfg.account, "x-xrea-server": cfg.serverName, "x-xrea-secret": cfg.apiSecretKey }
-    const app = createGatewayApp({ registry: new Registry(), internalToken: TOKEN, logger: silentLogger, words: ["poc"] })
+    const headers = { "content-type": "application/json", "x-xrea-account": cfg.account, "x-xrea-server": cfg.serverName, "x-xrea-secret": cfg.apiSecretKey }
+    const app = createGatewayApp({ registry: new Registry(), domainCheck: mxCheck(nodeResolver), logger: silentLogger, words: ["poc"] })
     const direct = new XreaClient(cfg)
     const before = (await direct.mailList()).length
     const pause = () => new Promise(r => setTimeout(r, 1500)) // 別のクライアントとは送信間隔が共有されないため空ける
@@ -46,8 +47,8 @@ describe.runIf(process.env.XREA_LIVE === "1")("実際のAPIに対する発行と
   test("xrea-gateway/AC-16: 検証用メールボックスに転送を追加・変更・解除でき、検証用アドレスが残らない", async () => {
     await new Promise(r => setTimeout(r, 1500))
     const cfg = loadXreaConfig()
-    const headers = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json", "x-xrea-account": cfg.account, "x-xrea-server": cfg.serverName, "x-xrea-secret": cfg.apiSecretKey }
-    const app = createGatewayApp({ registry: new Registry(), internalToken: TOKEN, logger: silentLogger })
+    const headers = { "content-type": "application/json", "x-xrea-account": cfg.account, "x-xrea-server": cfg.serverName, "x-xrea-secret": cfg.apiSecretKey }
+    const app = createGatewayApp({ registry: new Registry(), domainCheck: mxCheck(nodeResolver), logger: silentLogger })
     const direct = new XreaClient(cfg)
     const name = `poc-mbx-${Date.now().toString(36)}`
     const address = `${name}@${domain}`

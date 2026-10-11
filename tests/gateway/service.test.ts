@@ -8,14 +8,13 @@ import { mxCheck, type DomainCheck, type Resolver } from "../../src/gateway/doma
 import { silentLogger } from "../../src/shared/logger"
 import { FakeXrea, mail, sampleMails } from "./fakes"
 
-const TOKEN = "t".repeat(32)
-const H = { authorization: `Bearer ${TOKEN}`, "x-xrea-account": "acct", "x-xrea-server": "s1.xrea.com", "x-xrea-secret": "SECRET" }
+const H = { "x-xrea-account": "acct", "x-xrea-server": "s1.xrea.com", "x-xrea-secret": "SECRET" }
 const JSON_H = { ...H, "content-type": "application/json" }
 
 function setup(mails = sampleMails(), opts: { rnd?: () => number; words?: readonly string[]; domainCheck?: DomainCheck } = {}) {
   const xrea = new FakeXrea(mails)
   const registry = new Registry(100, 600_000, Date.now, () => xrea)
-  const app = createGatewayApp({ registry, internalToken: TOKEN, logger: silentLogger, ...opts })
+  const app = createGatewayApp({ registry, logger: silentLogger, domainCheck: async () => { throw new AppError("validation_error", "テストではMXを確認しません") }, ...opts })
   const post = (b: object) => app.request("/v1/aliases", { method: "POST", headers: JSON_H, body: JSON.stringify(b) })
   const patch = (address: string, b: unknown) =>
     app.request(`/v1/aliases/${encodeURIComponent(address)}`, { method: "PATCH", headers: JSON_H, body: JSON.stringify(b) })

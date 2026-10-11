@@ -11,6 +11,7 @@ import { Tenants } from "../../src/reader/tenants"
 import { silentLogger } from "../../src/shared/logger"
 import { vaultsJson } from "../reader/helpers"
 import { bundleWorker } from "../app/workerBundle"
+import { loadAppConfig } from "../../src/app/config"
 import { ENV, makeApp } from "../app/helpers"
 
 const read = (f: string) =>
@@ -33,6 +34,9 @@ describe("配備の定義", () => {
       not_found_handling: "none",
     })
     expect(wrangler.assets.run_worker_first).toEqual(["/api/*", "/healthz"])
+    // ゲートウェイは同じ Worker の Durable Object（SQLite 方式）として動く
+    expect(wrangler.durable_objects.bindings).toEqual([{ name: "GATEWAY", class_name: "GatewayTenant" }])
+    expect(wrangler.migrations).toEqual([{ tag: "v1", new_sqlite_classes: ["GatewayTenant"] }])
     // ビルドの npm スクリプトが、定義の出力先に書き出す
     const scripts = JSON.parse(read("package.json")).scripts
     expect(scripts["build:worker"]).toContain("--outfile=dist/worker/index.js")
@@ -43,18 +47,18 @@ describe("配備の定義", () => {
     expect(Object.keys(wrangler.vars).sort()).toEqual([
       "CREDENTIAL_STORE",
       "PROTON_READER_URL",
-      "XREA_GATEWAY_URL",
     ])
     expect(wrangler.vars.CREDENTIAL_STORE).toBe("cookie")
     const text = read("wrangler.template.jsonc")
     // 秘密は定義の外で設定する。名前は案内の注記にだけ現れ、値の代入はない
     expect(text).toMatch(/wrangler secret put/)
     expect(text).not.toMatch(/^\s*(COOKIE_SECRET|INTERNAL_TOKEN)\s*=/m)
-    expect(wrangler.vars.XREA_GATEWAY_URL).toBe("")
-    // 変数と秘密を合わせて、アプリの必須設定（URL・COOKIE_SECRET・INTERNAL_TOKEN）が揃う
+    // 読み取りサービスを使わないなら、秘密は COOKIE_SECRET だけで設定が揃う
+    expect(() => loadAppConfig({ ...wrangler.vars, COOKIE_SECRET: "c".repeat(32) }, { allowSqlite: false })).not.toThrow()
+    // 読み取りサービスを使うなら、URL と INTERNAL_TOKEN が加わる
     const provided = {
       ...wrangler.vars,
-      XREA_GATEWAY_URL: "https://gw.example.net",
+      PROTON_READER_URL: "https://reader.example.net",
       COOKIE_SECRET: "c".repeat(32),
       INTERNAL_TOKEN: "i".repeat(32),
     }
@@ -87,7 +91,7 @@ describe("配備の定義", () => {
         await probe(
           {
             app: "https://a.example",
-            gateway: "https://SECRETHOST-XYZ.example",
+            reader: "https://SECRETHOST-XYZ.example",
           },
           { fetch: fetchStub },
         ),

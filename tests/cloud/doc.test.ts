@@ -15,7 +15,7 @@ describe("クラウド配備の手順書", () => {
     const flow = mermaid.find((m) => m.startsWith("flowchart")) ?? ""
     for (const name of [
       "app",
-      "xrea-gateway",
+      "Durable Object",
       "proton-reader",
       "XREA API",
       "Proton Pass",
@@ -23,7 +23,6 @@ describe("クラウド配備の手順書", () => {
       expect(flow).toContain(name)
     const seq = mermaid.find((m) => m.startsWith("sequenceDiagram")) ?? ""
     const order = [
-      "xrea-gateway をデプロイ",
       "proton-reader をデプロイ",
       "wrangler.jsonc",
       "疎通確認",
@@ -34,7 +33,7 @@ describe("クラウド配備の手順書", () => {
 
   test("cloud-deploy/AC-13: Cloud Run の手順は最大1と Secret Manager を使い、実値と PORT の指定を含まない", () => {
     const deploys = shell.split("gcloud run deploy").slice(1)
-    expect(deploys.length).toBe(2)
+    expect(deploys.length).toBe(1)
     for (const d of deploys)
       expect(d.split("\n\n")[0]).toContain("--max-instances 1")
     expect(shell).toContain(
@@ -86,7 +85,7 @@ describe("クラウドの運用の手順書", () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order)
     expect(ops).toContain("## 4. 全利用者の失効")
     expect(ops).toContain("直前の秘密値を設定せずに")
-    expect(ops).toMatch(/xrea-gateway[^\n]*\| 1 /)
+    expect(ops).toMatch(/proton-reader[^\n]*\| 1 /)
     expect(ops).toContain("--max-instances 1")
     expect(ops).not.toMatch(
       /(COOKIE_SECRET|INTERNAL_TOKEN)=["']?[A-Za-z0-9+/=]{32,}/,

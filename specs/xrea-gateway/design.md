@@ -4,9 +4,8 @@
 
 | パス                            | 責務                                                 |
 | ------------------------------- | ---------------------------------------------------- |
-| `src/gateway/main.ts`           | 設定の読み込みと起動                                 |
-| `src/gateway/config.ts`         | 環境変数の読み込みと検証                             |
-| `src/gateway/app.ts`            | ルーティング、共有シークレットの検査、エラー応答     |
+| `src/gateway/app.ts`            | ルーティングと認証情報の検査、エラー応答             |
+| `src/gateway/tenantKey.ts`      | 認証情報からアカウントの鍵を導く                     |
 | `src/gateway/service.ts`        | 一覧、発行、転送の設定・解除、削除、候補の導出       |
 | `src/gateway/registry.ts`       | アカウントごとのクライアント・キャッシュ・排他の保持 |
 | `src/gateway/listCache.ts`      | 一覧のキャッシュ                                     |
@@ -16,14 +15,13 @@
 | `src/gateway/words.ts`          | ランダム名に使う単語の辞書                           |
 | `src/shared/errors.ts`          | アプリ共通のエラーコードと状態コードの対応           |
 | `src/shared/logger.ts`          | 構造化ログ                                           |
-| `src/shared/internalAuth.ts`    | 内部の共有シークレットの検査                         |
 | `tests/gateway/service.test.ts` | 一覧・発行・転送先の変更・削除・候補の単体テスト     |
 | `tests/gateway/http.test.ts`    | 認証・排他・キャッシュ・クライアントの保持のテスト   |
 | `tests/gateway/live.test.ts`    | 実際のAPIに対する発行・変更・削除のテスト            |
 
 ## 2. 設計項目
 
-### D-1: HTTP API と認証 (FR-7, FR-11)
+### D-1: HTTP API と認証情報の検査 (FR-7)
 
 | メソッドとパス                      | 要求                            | 成功応答                        |
 | ----------------------------------- | ------------------------------- | ------------------------------- |
@@ -33,13 +31,9 @@
 | DELETE /v1/aliases/:address         | アドレスをURLエンコードしたパス | 204                             |
 | DELETE /v1/aliases/:address/forward | アドレスをURLエンコードしたパス | 200 { alias }                   |
 | GET /v1/options                     | なし                            | 200 { domains, forwardTargets } |
-| GET /healthz, GET /health           | なし                            | 200 { ok: true }                |
 
 ```ts
-// /healthz と /health 以外の全ルートの前段
-export function internalAuth(token: string): MiddlewareHandler // Authorization: Bearer <INTERNAL_TOKEN> を定数時間で比較する
-
-// 認証情報は要求ヘッダで受け取る
+// 認証情報は要求ヘッダで受け取る。3項目のどれかが欠けたら 401 unauthorized
 const creds = {
   account: h("x-xrea-account"),
   serverName: h("x-xrea-server"),
@@ -63,15 +57,15 @@ export type ErrorCode =
   | "unauthorized"
 ```
 
-| ErrorCode        | HTTP | 発生条件                                 |
-| ---------------- | ---- | ---------------------------------------- |
-| unauthorized     | 401  | 共有シークレットの不一致、認証情報の欠落 |
-| validation_error | 400  | 入力が規則に反する                       |
-| forbidden        | 403  | 転送のみ以外の変更・削除                 |
-| not_found        | 404  | 変更・削除の対象が存在しない             |
-| conflict         | 409  | 同一アドレスがすでに存在する             |
-| rate_limited     | 503  | XREAが送信間隔の超過を返した             |
-| upstream_error   | 502  | XREAまたはネットワークの異常             |
+| ErrorCode        | HTTP | 発生条件                     |
+| ---------------- | ---- | ---------------------------- |
+| unauthorized     | 401  | 認証情報の欠落               |
+| validation_error | 400  | 入力が規則に反する           |
+| forbidden        | 403  | 転送のみ以外の変更・削除     |
+| not_found        | 404  | 変更・削除の対象が存在しない |
+| conflict         | 409  | 同一アドレスがすでに存在する |
+| rate_limited     | 503  | XREAが送信間隔の超過を返した |
+| upstream_error   | 502  | XREAまたはネットワークの異常 |
 
 upstream_error の本文には kind を付け、XREAが拒否したとき（認証情報の誤りを含む）は api、到達できなかったときは network にする。
 
@@ -229,8 +223,8 @@ export class Registry {
     private idleMs = 600_000,
     private now = Date.now,
   ) {}
-  /** key = sha256(account + "\0" + serverName + "\0" + apiSecretKey) の16進。無ければ作る */
-  get(creds: XreaConfig): Tenant
+  /** key = tenantKey(creds)（sha256 の16進。WebCrypto）。無ければ作る */
+  get(creds: XreaConfig): Promise<Tenant>
   /** 最後の使用から idleMs を過ぎたものを破棄し、max を超えたら最も古く使われたものを破棄する */
   private evict(): void
 }
@@ -272,20 +266,32 @@ logger.info({ route: "GET /v1/aliases", count, durationMs }) // 本文・アド�
 | 排他の待ち（1件の待機）    | 1.0秒      |
 | 合計                       | 4.5秒      |
 
-### D-7: 設定 (FR-7, FR-11)
+### D-7: アプリへの組み込み (FR-11)
 
-| 環境変数       | 必須 | 既定値             |
-| -------------- | ---- | ------------------ |
-| INTERNAL_TOKEN | 必須 | なし（32文字以上） |
-| PORT           | 任意 | 8081               |
-| BIND_ADDRESS   | 任意 | 0.0.0.0            |
-| LOG_LEVEL      | 任意 | info               |
+```ts
+// src/gateway/app.ts: 認証と待ち受けを持たない。呼び出し元（アプリ）が fetch で直接呼ぶ
+export function createGatewayApp(opts: {
+  registry: Registry
+  domainCheck?: DomainCheck
+  logger?: Logger
+}): Hono
+export type GatewayFetcher = (x: XreaConfig, req: Request) => Promise<Response>
+
+// Node.js: アプリの入口で組み立て、ネットワークを介さずに呼び出す。要求のURLは http://gateway.internal 固定
+const gateway = createGatewayApp({
+  registry: new Registry(),
+  domainCheck: mxCheck(),
+})
+const fetcher: GatewayFetcher = async (_x, req) => gateway.fetch(req)
+```
+
+ゲートウェイ自身は環境変数を読まない。ログの詳細度はアプリの LOG_LEVEL に従う。
 
 ## 3. エラー処理
 
 | 事象                               | 処理                                                     |
 | ---------------------------------- | -------------------------------------------------------- |
-| INTERNAL_TOKEN が未設定または短い  | 変数名を示して異常終了する                               |
+| 認証情報の項目が欠けている         | 401 unauthorized を返し、XREAを呼び出さない              |
 | 要求の本文が不正なJSON             | 400 validation_error を返す                              |
 | XREAがメッセージ付きでエラーを返す | 502 upstream_error を返し、メッセージを message に載せる |
 | XREAの送信間隔の超過               | 503 rate_limited を返し、再試行を促す                    |

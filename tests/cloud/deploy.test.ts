@@ -50,7 +50,7 @@ function fake(existing: string[] = [], workerSecrets: string[] = []) {
 }
 
 describe("クラウドの一括配備", () => {
-  test("cloud-deploy/AC-15: 初回は削除を行わず、コンテナ → Workers の順に配備する", () => {
+  test("cloud-deploy/AC-15: 初回は削除を行わず、読み取りサービスのコンテナ → Workers の順に配備する", () => {
     const f = fake()
     const urls = deploy(base, f.runner)
     expect(
@@ -60,13 +60,10 @@ describe("クラウドの一括配備", () => {
           (k) => k.includes("services delete") || k.includes("images delete"),
         ),
     ).toBe(false)
-    expect(urls).toEqual({
-      gateway: "https://xrea-gateway.run.app",
-      reader: "https://proton-reader.run.app",
-    })
+    expect(urls).toEqual({ reader: "https://proton-reader.run.app" })
+    // ゲートウェイは Workers に内蔵されるため、コンテナを作らない
+    expect(f.execs().some((k) => k.includes("xrea-gateway") || k.includes("--target app"))).toBe(false)
     const order = [
-      "--target app",
-      "run deploy xrea-gateway",
       "--target reader",
       "run deploy proton-reader",
       "wrangler deploy",
@@ -74,7 +71,7 @@ describe("クラウドの一括配備", () => {
     expect(order.every((i) => i >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
     const wd = f.execs()[f.idx("wrangler deploy")] ?? ""
-    expect(wd).toContain("--var XREA_GATEWAY_URL:https://xrea-gateway.run.app")
+    expect(wd).not.toContain("XREA_GATEWAY_URL")
     expect(wd).toContain(
       "--var PROTON_READER_URL:https://proton-reader.run.app",
     )
@@ -82,23 +79,21 @@ describe("クラウドの一括配備", () => {
 
   test("cloud-deploy/AC-15: 再実行では、同じタグのままサービス → イメージの順に削除してから push とデプロイを行う", () => {
     const f = fake([
-      "services describe xrea-gateway",
-      "images describe asia-northeast1-docker.pkg.dev/proj/xrea/app:v1",
+      "services describe proton-reader",
+      "images describe asia-northeast1-docker.pkg.dev/proj/xrea/reader:v1",
     ])
-    deploy({ ...base, reader: false }, f.runner)
+    deploy(base, f.runner)
     const order = [
-      "--target app",
-      "services delete xrea-gateway",
-      "images delete asia-northeast1-docker.pkg.dev/proj/xrea/app:v1",
+      "--target reader",
+      "services delete proton-reader",
+      "images delete asia-northeast1-docker.pkg.dev/proj/xrea/reader:v1",
       "docker push",
-      "run deploy xrea-gateway",
+      "run deploy proton-reader",
     ].map(f.idx)
     expect(order.every((i) => i >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
-    // 存在しない proton-reader の削除は行わず、タグは変えない
-    expect(
-      f.execs().some((k) => k.includes("proton-reader") || k.includes(":v2")),
-    ).toBe(false)
+    // タグは変えない
+    expect(f.execs().some((k) => k.includes(":v2"))).toBe(false)
     expect(
       f
         .execs()
@@ -108,10 +103,11 @@ describe("クラウドの一括配備", () => {
     ).toHaveLength(1)
   })
 
-  test("cloud-deploy/AC-15: --no-reader では読み取りサービスを配備せず、URLを空にして Workers を配備する", () => {
+  test("cloud-deploy/AC-15: --no-reader では読み取りサービスを配備せず、Google Cloud に触れずに URL を空にして Workers を配備する", () => {
     const f = fake()
-    expect(deploy({ ...base, reader: false }, f.runner).reader).toBeUndefined()
-    expect(f.execs().some((k) => k.includes("--target reader"))).toBe(false)
+    expect(deploy({ ...base, reader: false, projectId: "" }, f.runner).reader).toBeUndefined()
+    expect(f.calls.some((c) => c.cmd === "gcloud" || c.cmd === "docker")).toBe(false)
+    expect(f.execs().some((k) => k.includes("secret put INTERNAL_TOKEN"))).toBe(false)
     expect(f.execs()[f.idx("wrangler deploy")]).toContain(
       "--var PROTON_READER_URL:",
     )
@@ -183,6 +179,8 @@ describe("クラウドの一括配備", () => {
     expect(() => loadConfig({ CLOUDFLARE_ACCOUNT_ID: "a" }, [])).toThrow(
       "PROJECT_ID",
     )
+    // 読み取りサービスを配備しないときは PROJECT_ID が要らない
+    expect(loadConfig({ CLOUDFLARE_ACCOUNT_ID: "a" }, ["--no-reader"])).toMatchObject({ reader: false, projectId: "" })
     expect(() => loadConfig({ PROJECT_ID: "p" }, [])).toThrow(
       "CLOUDFLARE_ACCOUNT_ID",
     )
