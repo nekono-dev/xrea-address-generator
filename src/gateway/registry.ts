@@ -5,7 +5,7 @@ import { ListCache } from "./listCache"
 import { Mutex } from "./mutex"
 import type { XreaPort } from "./service"
 
-export type Tenant = { xrea: XreaPort; cache: ListCache; mutex: Mutex; lastUsed: number }
+export type Tenant = { xrea: XreaPort; cache: ListCache; mutex: Mutex; lastUsed: number; serverName: string }
 
 export class Registry {
   private tenants = new Map<string, Tenant>()
@@ -25,7 +25,7 @@ export class Registry {
     let t = this.tenants.get(key)
     if (!t) {
       const xrea = this.factory(creds)
-      t = { xrea, cache: new ListCache(() => xrea.mailList(), this.ttlMs, this.now), mutex: new Mutex(), lastUsed: 0 }
+      t = { xrea, cache: new ListCache(() => xrea.mailList(), this.ttlMs, this.now), mutex: new Mutex(), lastUsed: 0, serverName: creds.serverName }
       this.tenants.set(key, t)
     }
     t.lastUsed = this.now()

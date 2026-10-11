@@ -16,7 +16,7 @@ test.describe("発行フォームと部品", () => {
     test(`web-ui/AC-13: 4つの部品の描画後の高さが、幅900ピクセルで38ピクセル、幅360ピクセルで44ピクセルになる（幅${width}）`, async ({ page }) => {
       await open(page, width)
       const heights = await page.evaluate(() =>
-        ["#name", "#issue", "#domain .dd-btn", "#target input"].map(s => Math.round(document.querySelector(s)!.getBoundingClientRect().height)),
+        ["#name", "#issue", "#domain input", "#target input"].map(s => Math.round(document.querySelector(s)!.getBoundingClientRect().height)),
       )
       const h = width < 680 ? 44 : 38
       expect(heights).toEqual([h, h, h, h])
@@ -33,7 +33,7 @@ test.describe("発行フォームと部品", () => {
           const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)
           return { count: items.length, onTop: !!top && (top === last || last.contains(top)) }
         }, menu)
-      await page.locator("#domain .dd-btn").click()
+      await page.locator("#domain .chev").click()
       await page.waitForTimeout(200)
       expect(await lastOnTop("#domain")).toEqual({ count: 3, onTop: true })
       await page.keyboard.press("Escape")
@@ -45,7 +45,7 @@ test.describe("発行フォームと部品", () => {
       await page.keyboard.press("Escape")
       await page.mouse.wheel(0, 600)
       await page.waitForTimeout(200)
-      await page.locator("#domain .dd-btn").click()
+      await page.locator("#domain .chev").click()
       await page.waitForTimeout(200)
       expect(await lastOnTop("#domain")).toEqual({ count: 3, onTop: true })
     })
@@ -84,16 +84,30 @@ test.describe("発行フォームと部品", () => {
 
   test("web-ui/AC-4: キーボードだけでドメインを選ぶと表示が切り替わり、その値で発行される", async ({ page }) => {
     const api = await open(page)
-    await page.locator("#domain .dd-btn").focus()
+    await page.locator("#domain input").focus()
     await page.keyboard.press("ArrowDown")
     await expect(page.locator("#domain [role=option]")).toHaveText(["example.com", "example.net", "example.org"])
     await page.keyboard.press("ArrowDown")
     await page.keyboard.press("Enter")
-    await expect(page.locator("#domain .dd-label")).toHaveText("example.net")
+    await expect(page.locator("#domain input")).toHaveValue("example.net")
     await page.locator("#name").fill("keyboard")
     await page.locator("#name").press("Enter")
     await expect.poll(() => posts(api).length).toBe(1)
     expect(posts(api)[0]!.body.domain).toBe("example.net")
+  })
+
+  test("web-ui/AC-27: 候補にないドメインを入力して発行でき、形式不正のドメインでは誤りが表示されて発行ボタンが無効になる", async ({ page }) => {
+    const api = await open(page)
+    await page.locator("#domain input").fill("bad domain")
+    await expect(page.locator("#domain-error")).toBeVisible()
+    await expect(page.locator("#issue")).toBeDisabled()
+    await page.locator("#domain input").fill("New.Example")
+    await expect(page.locator("#domain-error")).toHaveCount(0)
+    await expect(page.locator("#issue")).toBeEnabled()
+    await page.locator("#name").fill("free")
+    await page.locator("#name").press("Enter")
+    await expect.poll(() => posts(api).length).toBe(1)
+    expect(posts(api)[0]!.body.domain).toBe("new.example")
   })
 
   test("web-ui/AC-2: 名前欄でEnterを押すと発行の要求が1回送信され、変換確定中のEnterでは送信されない", async ({ page }) => {

@@ -4,6 +4,7 @@ import { AppError, STATUS, errorBody } from "../shared/errors"
 import { internalAuth } from "../shared/internalAuth"
 import { consoleLogger, type Logger } from "../shared/logger"
 import { XreaError } from "../xrea/errors"
+import type { DomainCheck } from "./domainCheck"
 import type { Registry } from "./registry"
 import * as svc from "./service"
 
@@ -16,7 +17,7 @@ function toAppError(e: unknown): AppError | null {
   return null
 }
 
-export function createGatewayApp(opts: { registry: Registry; internalToken: string; logger?: Logger; words?: readonly string[]; rnd?: () => number }) {
+export function createGatewayApp(opts: { registry: Registry; internalToken: string; logger?: Logger; words?: readonly string[]; rnd?: () => number; domainCheck?: DomainCheck }) {
   const log = opts.logger ?? consoleLogger
   const app = new Hono()
 
@@ -75,7 +76,7 @@ export function createGatewayApp(opts: { registry: Registry; internalToken: stri
         domain: typeof b.domain === "string" ? b.domain : "",
         forwardTo: typeof b.forwardTo === "string" ? b.forwardTo : "",
       },
-      { words: opts.words, rnd: opts.rnd },
+      { words: opts.words, rnd: opts.rnd, domainCheck: opts.domainCheck },
     )
     return c.json({ alias }, 201)
   })

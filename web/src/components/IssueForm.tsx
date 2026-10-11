@@ -3,8 +3,7 @@ import { useEffect, useState } from "preact/hooks"
 import { api } from "../api"
 import { loadPrefs, savePrefs } from "../prefs"
 import { store as defaultStore, useStore, type Store } from "../store"
-import { Combobox, isInvalidMail, MAIL_RE } from "./Combobox"
-import { Dropdown } from "./Dropdown"
+import { Combobox, isInvalidDomain, isInvalidMail, MAIL_RE } from "./Combobox"
 
 const isImeEnter = (e: KeyboardEvent) => e.isComposing || e.keyCode === 229
 
@@ -18,20 +17,21 @@ export function IssueForm({ store = defaultStore }: { store?: Store }) {
   const [targetTouched, setTargetTouched] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  // 候補の取得後に、既定のドメインと転送先を入れる（保存したドメインが候補に無ければ先頭の候補にする）
+  // 候補の取得後に、既定のドメインと転送先を入れる（保存したドメインが無いときだけ先頭の候補にする）
   useEffect(() => {
-    if (options.domains.length && !options.domains.includes(domain)) setDomain(options.domains[0]!)
+    if (!domain && options.domains[0]) setDomain(options.domains[0])
     if (!targetTouched && !target && options.forwardTargets[0]) setTarget(options.forwardTargets[0])
   }, [options])
 
   const invalid = isInvalidMail(target)
-  const canIssue = !busy && !optionsError && domain !== "" && target.trim() !== "" && !invalid
+  const domainInvalid = isInvalidDomain(domain)
+  const canIssue = !busy && !optionsError && domain.trim() !== "" && !domainInvalid && target.trim() !== "" && !invalid
 
   async function issue() {
     if (!canIssue) return
     setBusy(true)
     try {
-      const { alias } = await api.create({ name: name.trim() || undefined, domain, forwardTo: target.trim() })
+      const { alias } = await api.create({ name: name.trim() || undefined, domain: domain.trim().toLowerCase(), forwardTo: target.trim() })
       store.add(alias) // 応答の受信後すぐに一覧へ反映する
       store.flash(alias.address)
       setName("")
@@ -62,11 +62,19 @@ export function IssueForm({ store = defaultStore }: { store?: Store }) {
           }}
         />
         <span class="at">@</span>
-        <Dropdown id="domain" label="ドメイン" items={options.domains} value={domain || "ドメインなし"} onChange={v => {
+        <Combobox
+          id="domain"
+          label="ドメイン"
+          value={domain}
+          candidates={options.domains}
+          placeholder="選択、またはドメインを入力"
+          invalid={domainInvalid}
+          onInput={v => {
             setDomain(v)
-            savePrefs({ domain: v })
+            if (!isInvalidDomain(v) && v.trim() !== "") savePrefs({ domain: v.trim().toLowerCase() })
           }}
-          disabled={!options.domains.length} />
+          onEnter={() => void issue()}
+        />
         <button type="button" class="btn" id="issue" disabled={!canIssue} onClick={() => void issue()}>
           発行
         </button>
@@ -86,6 +94,7 @@ export function IssueForm({ store = defaultStore }: { store?: Store }) {
           onEnter={() => void issue()}
         />
       </div>
+      {domainInvalid && <div class="err" id="domain-error">ドメイン名の形式で入力してください（日本語ドメインはpunycodeで指定）</div>}
       {invalid && <div class="err" id="target-error">メールアドレスの形式で入力してください</div>}
     </div>
   )

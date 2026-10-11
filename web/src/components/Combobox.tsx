@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from "preact/hooks"
 export const MAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const isInvalidMail = (v: string): boolean => v.trim() !== "" && !MAIL_RE.test(v.trim())
 
+/** 小文字のドメイン名（ゲートウェイの検査と同じ規則） */
+export const DOMAIN_RE = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/
+export const isInvalidDomain = (v: string): boolean => v.trim() !== "" && !DOMAIN_RE.test(v.trim().toLowerCase())
+
 type Props = {
   value: string
   onInput: (v: string) => void

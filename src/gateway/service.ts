@@ -2,6 +2,7 @@
 import { AppError } from "../shared/errors"
 import type { CreateMailInput, ForwardCheck } from "../xrea/client"
 import type { MailEntry } from "../xrea/errors"
+import { mxCheck, type DomainCheck } from "./domainCheck"
 import type { Tenant } from "./registry"
 import { randomName } from "./randomName"
 import { MAIL_RE, normalizeName, validate, type CreateInput } from "./validate"
@@ -51,14 +52,15 @@ export async function options(t: Tenant) {
   return deriveOptions(await t.cache.get())
 }
 
-export function createAlias(t: Tenant, input: CreateInput, deps: { words?: readonly string[]; rnd?: () => number } = {}): Promise<GatewayAlias> {
+export function createAlias(t: Tenant, input: CreateInput, deps: { words?: readonly string[]; rnd?: () => number; domainCheck?: DomainCheck } = {}): Promise<GatewayAlias> {
   return t.mutex.run(async () => {
     const mails = await t.cache.fresh()
-    const { domains } = deriveOptions(mails)
-    const errors = validate(input, domains)
+    const errors = validate(input)
     if (errors.length) throw new AppError("validation_error", errors.join("。"))
 
     const domain = input.domain.trim().toLowerCase()
+    // 候補にあるドメインは確認しない。ないドメインは、XREAが未登録でも受理するため、MXで確かめる
+    if (!deriveOptions(mails).domains.includes(domain)) await (deps.domainCheck ?? mxCheck())(domain, t.serverName)
     const forwardTo = input.forwardTo.trim()
     const existing = new Set(mails.map(addressOf))
     let name = input.name === undefined ? "" : normalizeName(input.name)

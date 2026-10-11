@@ -9,20 +9,25 @@ async function open(page: Page) {
 }
 
 test.describe("選択した値の保存と復元", () => {
-  test("web-ui/AC-19: 選んだドメインが再読み込み後の初期値になり、候補に無い保存値は先頭の候補に置き換わる", async ({ page }) => {
+  test("web-ui/AC-19: 選んだ・入力した有効なドメインが再読み込み後の初期値になり、形式不正の入力は保存されない", async ({ page }) => {
     await mockApi(page)
     await open(page)
-    await expect(page.locator("#domain .dd-btn")).toContainText("example.com")
-    await page.locator("#domain .dd-btn").click()
+    await expect(page.locator("#domain input")).toHaveValue("example.com")
+    await page.locator("#domain .chev").click()
     await page.locator("#domain [role=option]", { hasText: "example.net" }).click()
     await page.reload()
     await open(page)
-    await expect(page.locator("#domain .dd-btn")).toContainText("example.net")
-    // 候補に無いドメインが保存されているとき
-    await page.evaluate(k => localStorage.setItem(k, JSON.stringify({ domain: "gone.example" })), PREFS_KEY)
+    await expect(page.locator("#domain input")).toHaveValue("example.net")
+    // 候補にないドメインも、形式が正しければ保存される
+    await page.locator("#domain input").fill("Free.Example")
     await page.reload()
     await open(page)
-    await expect(page.locator("#domain .dd-btn")).toContainText("example.com")
+    await expect(page.locator("#domain input")).toHaveValue("free.example")
+    // 形式不正の入力は保存されない
+    await page.locator("#domain input").fill("bad domain")
+    await page.reload()
+    await open(page)
+    await expect(page.locator("#domain input")).toHaveValue("free.example")
   })
 
   test("web-ui/AC-20: 入力した有効な転送先が再読み込み後の初期値になり、形式不正の入力は保存されない", async ({ page }) => {

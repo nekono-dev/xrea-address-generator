@@ -3,6 +3,8 @@ import { createGatewayApp } from "../../src/gateway/app"
 import { Registry } from "../../src/gateway/registry"
 import { randomName } from "../../src/gateway/randomName"
 import { WORDS } from "../../src/gateway/words"
+import { AppError } from "../../src/shared/errors"
+import { mxCheck, type DomainCheck, type Resolver } from "../../src/gateway/domainCheck"
 import { silentLogger } from "../../src/shared/logger"
 import { FakeXrea, mail, sampleMails } from "./fakes"
 
@@ -10,7 +12,7 @@ const TOKEN = "t".repeat(32)
 const H = { authorization: `Bearer ${TOKEN}`, "x-xrea-account": "acct", "x-xrea-server": "s1.xrea.com", "x-xrea-secret": "SECRET" }
 const JSON_H = { ...H, "content-type": "application/json" }
 
-function setup(mails = sampleMails(), opts: { rnd?: () => number; words?: readonly string[] } = {}) {
+function setup(mails = sampleMails(), opts: { rnd?: () => number; words?: readonly string[]; domainCheck?: DomainCheck } = {}) {
   const xrea = new FakeXrea(mails)
   const registry = new Registry(100, 600_000, Date.now, () => xrea)
   const app = createGatewayApp({ registry, internalToken: TOKEN, logger: silentLogger, ...opts })
@@ -76,11 +78,13 @@ describe("発行", () => {
     expect(randomName(["quiet", "river"], () => v[i++]!)).toBe("quiet.river41")
   })
 
-  test("xrea-gateway/AC-3: 空白を含む名前・候補にないドメイン・形式不正の転送先は400で、作成されない", async () => {
+  test("xrea-gateway/AC-3: 空白を含む名前・形式不正のドメイン・形式不正の転送先は400で、作成されない", async () => {
     const { post, xrea } = setup()
     for (const body of [
       { name: "has space", domain: "example.com", forwardTo: "me@mail.example" },
-      { name: "ok", domain: "unknown.example", forwardTo: "me@mail.example" },
+      { name: "ok", domain: "not a domain", forwardTo: "me@mail.example" },
+      { name: "ok", domain: "localhost", forwardTo: "me@mail.example" },
+      { name: "ok", domain: "-bad-.example", forwardTo: "me@mail.example" },
       { name: "ok", domain: "example.com", forwardTo: "not-an-address" },
       { name: ".dot", domain: "example.com", forwardTo: "me@mail.example" },
       { name: "a..b", domain: "example.com", forwardTo: "me@mail.example" },
@@ -92,6 +96,24 @@ describe("発行", () => {
     }
     expect(xrea.created).toEqual([])
     expect((await post({ name: "x".repeat(49), domain: "example.com", forwardTo: "me@mail.example" })).status).toBe(201)
+  })
+
+  test("xrea-gateway/AC-17: 候補にないドメインは、確認を通ったときだけ作成され、確認はXREAのサーバ名で行われ、候補にあるドメインでは行われない", async () => {
+    const checked: string[] = []
+    const domainCheck: DomainCheck = async (domain, server) => {
+      checked.push(`${domain}@${server}`)
+      if (domain === "denied.example") throw new AppError("validation_error", "MXが指していません")
+    }
+    const { post, xrea } = setup(sampleMails(), { domainCheck })
+    expect((await post({ name: "a", domain: "example.com", forwardTo: "me@mail.example" })).status).toBe(201)
+    expect(checked).toEqual([])
+    const ok = await post({ name: "b", domain: "New.Example", forwardTo: "me@mail.example" })
+    expect(ok.status).toBe(201)
+    expect((await ok.json()).alias.address).toBe("b@new.example")
+    expect(checked).toEqual(["new.example@s1.xrea.com"])
+    const ng = await post({ name: "c", domain: "denied.example", forwardTo: "me@mail.example" })
+    expect(ng.status).toBe(400)
+    expect(xrea.created.map(c => c.domain)).toEqual(["example.com", "new.example"])
   })
 
   test("xrea-gateway/AC-3: 既存のアドレスと同じ組は409で、作成の呼び出しが行われない", async () => {
@@ -183,4 +205,43 @@ describe("削除・転送先の変更", () => {
       expect(performance.now() - start).toBeLessThan(5000)
     }
   }, 30_000)
+})
+
+describe("候補にないドメインのMXの確認", () => {
+  const SERVER = "m1.xrea.test"
+  const records: Record<string, { mx?: { exchange: string; priority: number }[]; a?: string[]; aaaa?: string[] }> = {
+    [SERVER]: { a: ["192.0.2.10"] },
+    "ok.example": { mx: [{ exchange: "mail.ok.example", priority: 10 }] },
+    "mail.ok.example": { a: ["192.0.2.10"] },
+    "other.example": { mx: [{ exchange: "mx.other.example", priority: 10 }] },
+    "mx.other.example": { a: ["198.51.100.1"] },
+    "nomx.example": { a: ["192.0.2.10"] },
+    "v6.example": { mx: [{ exchange: "v6mx.example", priority: 10 }] },
+    "v6mx.example": { aaaa: ["2001:db8::1"] },
+    [SERVER + "6"]: { aaaa: ["2001:db8::1"] },
+  }
+  const err = (code: string) => Object.assign(new Error(code), { code })
+  const resolver: Resolver = {
+    resolveMx: async n => records[n]?.mx ?? Promise.reject(err("ENODATA")),
+    resolve4: async n => records[n]?.a ?? Promise.reject(err(records[n] ? "ENODATA" : "ENOTFOUND")),
+    resolve6: async n => records[n]?.aaaa ?? Promise.reject(err(records[n] ? "ENODATA" : "ENOTFOUND")),
+  }
+  const check = mxCheck(resolver)
+
+  test("xrea-gateway/AC-17: MXの向き先がXREAのサーバのIPと一致すると通り、MXが無いときはドメイン自身のアドレスで判定する", async () => {
+    await expect(check("ok.example", SERVER)).resolves.toBeUndefined()
+    await expect(check("nomx.example", SERVER)).resolves.toBeUndefined()
+  })
+
+  test("xrea-gateway/AC-3: MXが他のサーバを指すとき、存在しないドメインのとき、400になる", async () => {
+    for (const d of ["other.example", "missing.example"]) {
+      await expect(check(d, SERVER)).rejects.toMatchObject({ code: "validation_error" })
+    }
+  })
+
+  test("xrea-gateway/AC-17: IPv6の一致も通り、DNSの失敗は400ではなく502になる", async () => {
+    await expect(mxCheck(resolver)("v6.example", SERVER + "6")).resolves.toBeUndefined()
+    const down: Resolver = { ...resolver, resolveMx: async () => Promise.reject(err("ETIMEOUT")) }
+    await expect(mxCheck(down)("ok.example", SERVER)).rejects.toMatchObject({ code: "upstream_error", kind: "network" })
+  })
 })

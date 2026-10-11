@@ -39,7 +39,7 @@ test.describe("タッチ操作の端末", () => {
       expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true)
       await page.locator('[data-address="shop@example.com"] [data-edit]').click()
       const sizes = await inputFontSizes(page)
-      expect(sizes.length).toBe(3)
+      expect(sizes.length).toBe(4)
       for (const s of sizes) expect(s).toBeGreaterThanOrEqual(16)
     })
   }
