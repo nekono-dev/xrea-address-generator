@@ -47,6 +47,7 @@ describe("認証", () => {
     const hz = await app.request("/healthz")
     expect(hz.status).toBe(200)
     expect(await hz.json()).toEqual({ ok: true })
+    expect((await app.request("/health")).status).toBe(200)
   })
 
   test("INTERNAL_TOKEN が未設定または短いと失敗し、既定値が仕様どおりになる", () => {

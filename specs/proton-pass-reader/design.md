@@ -154,11 +154,11 @@ export function toResponse(map: AddressMap, status: Status): EntriesResponse {
 
 ### D-6: HTTP API と認証 (FR-1, FR-9, FR-11)
 
-| メソッドとパス   | 要求ヘッダ                            | 成功応答                |
-| ---------------- | ------------------------------------- | ----------------------- |
-| GET /v1/entries  | Authorization: Bearer、X-Proton-Token | 200 { status, entries } |
-| POST /v1/refresh | Authorization: Bearer、X-Proton-Token | 202                     |
-| GET /healthz     | なし                                  | 200 { ok: true }        |
+| メソッドとパス        | 要求ヘッダ                            | 成功応答                |
+| --------------------- | ------------------------------------- | ----------------------- |
+| GET /v1/entries       | Authorization: Bearer、X-Proton-Token | 200 { status, entries } |
+| POST /v1/refresh      | Authorization: Bearer、X-Proton-Token | 202                     |
+| GET /healthz, /health | なし                                  | 200 { ok: true }        |
 
 ```ts
 export type EntriesResponse = {

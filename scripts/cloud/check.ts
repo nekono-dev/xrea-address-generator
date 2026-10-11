@@ -40,12 +40,12 @@ export async function probe(
   const bad = { xrea: { account: "probe", serverName: "probe.invalid", apiSecretKey: "probe" } }
   const results: Probe[] = [
     await run("Workers の死活確認", status(200), url(env.app, "/healthz")),
-    await run("ゲートウェイの死活確認", status(200), url(env.gateway, "/healthz")),
+    await run("ゲートウェイの死活確認", status(200), url(env.gateway, "/health")),
     await run("ゲートウェイは共有シークレットなしを拒否する", status(401), url(env.gateway, "/v1/aliases")),
   ]
   if (env.reader) {
     results.push(
-      await run("読み取りサービスの死活確認", status(200), url(env.reader, "/healthz")),
+      await run("読み取りサービスの死活確認", status(200), url(env.reader, "/health")),
       await run("読み取りサービスは共有シークレットなしを拒否する", status(401), url(env.reader, "/v1/entries")),
     )
   }

@@ -23,3 +23,11 @@
 - [x] T-3.2: 配備の手順書を作成し、秘匿値を残さない手順を明記する。
 - [ ] T-3.3: 実際のWorkersとコンテナ基盤へ配備して、疎通確認を実行する。
 - 検証: `npx vitest run tests/cloud`
+
+## Phase 4: 構成の図とCloud Runの手順
+
+- 対応: D-6
+- [x] T-4.1: 手順書に構成図と配備の順序のシーケンス図を追加する。
+- [x] T-4.2: Cloud Runの手順（Secret Manager、ビルド、デプロイ）を手順書に追加する。
+- [x] T-4.3: 手順書の内容のテストを、受け入れ条件のタグ付きで追加する。
+- 検証: `npx vitest run tests/cloud/doc.test.ts`

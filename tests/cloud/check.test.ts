@@ -17,7 +17,7 @@ async function listen(handler: http.RequestListener): Promise<string> {
 /** 共有シークレットの検査つきの偽の内部サービス */
 const internal = (healthy = true): http.RequestListener => (req, res) => {
   const path = req.url ?? ""
-  if (path === "/healthz") return void res.writeHead(healthy ? 200 : 503).end("{}")
+  if (path === "/health") return void res.writeHead(healthy ? 200 : 503).end("{}")
   res.writeHead(401).end("{}") // 共有シークレットなし
 }
 /** 偽のアプリ。誤った認証情報の登録の結果を、指定の状態で返す */
