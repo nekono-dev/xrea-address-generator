@@ -159,3 +159,31 @@ test.describe("サーバ名の選択", () => {
     await expect(page.locator("#cred-submit")).toBeDisabled()
   })
 })
+
+test.describe("サーバ名の候補の高さ", () => {
+  for (const [width, height] of [
+    [900, 700],
+    [360, 560],
+  ] as const) {
+    test(`web-credentials/AC-14: 候補が多くても候補リストが画面の縦幅に収まり、スクロールして末尾まで選べる（${width}x${height}）`, async ({ page }) => {
+      const api = await mockApi(page, { registered: false })
+      api.state.servers = Array.from({ length: 365 }, (_, i) => `s${i + 1}.xrea.com`)
+      await page.setViewportSize({ width, height })
+      await page.goto("/")
+      await page.locator('input[name="server"]').click()
+      const menu = page.locator("#cred-server .dd-menu")
+      await expect(menu).toBeVisible()
+      const m = await menu.evaluate(e => ({ h: e.getBoundingClientRect().height, sh: e.scrollHeight, bottom: e.getBoundingClientRect().bottom, vh: innerHeight, oy: getComputedStyle(e).overflowY }))
+      expect(m.h).toBeLessThanOrEqual(m.vh)
+      expect(m.bottom).toBeLessThanOrEqual(m.vh)
+      expect(m.sh).toBeGreaterThan(m.h) // 内部でスクロールする
+      expect(m.oy).toBe("auto")
+      // キーボードで末尾へ移動しても、選択中の候補が見えている位置までスクロールする
+      for (let i = 0; i < 60; i++) await page.keyboard.press("ArrowDown")
+      expect(await menu.evaluate(e => e.scrollTop)).toBeGreaterThan(0)
+      await page.locator("#cred-server .hi").scrollIntoViewIfNeeded()
+      await page.keyboard.press("Enter")
+      await expect(page.locator('input[name="server"]')).toHaveValue("s60.xrea.com")
+    })
+  }
+})

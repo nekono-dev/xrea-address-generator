@@ -47,6 +47,11 @@ export function Combobox({ value, onInput, candidates, onEnter, onEscape, label,
     return () => document.removeEventListener("click", onDoc)
   }, [])
 
+  // キーボードで移動した候補が見える位置までスクロールする
+  useEffect(() => {
+    if (open && hi >= 0) root.current?.querySelectorAll("[role=option]")[hi]?.scrollIntoView?.({ block: "nearest" })
+  }, [hi, open])
+
   const choose = (v: string) => {
     onInput(v)
     setOpen(false)

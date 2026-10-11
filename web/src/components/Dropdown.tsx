@@ -17,6 +17,10 @@ export function Dropdown({ items, value, onChange, label, id, disabled }: Props)
     return () => document.removeEventListener("click", onDoc)
   }, [])
 
+  useEffect(() => {
+    if (open) root.current?.querySelectorAll("[role=option]")[hi]?.scrollIntoView?.({ block: "nearest" })
+  }, [hi, open])
+
   const openMenu = () => {
     setHi(current)
     setOpen(true)

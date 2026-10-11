@@ -23,6 +23,7 @@ export async function mockApi(page: Page, init: { aliases?: Alias[]; proton?: Pr
     proton: init.proton ?? ready(),
     protonSequence: init.protonSequence ?? [],
     registered: init.registered ?? true,
+    servers: ["s1.xrea.com", "s10.xrea.com", "s100.xrea.com", "s2.xrea.com"],
     /** 登録の要求が返す失敗。null なら成功（204） */
     putFailure: null as null | { status: number; code: string; message: string },
     domains: ["example.com", "example.net", "example.org"],
@@ -46,7 +47,7 @@ export async function mockApi(page: Page, init: { aliases?: Alias[]; proton?: Pr
       return json(401, { error: { code: "credentials_required", message: "認証情報を登録してください" } })
     switch (key) {
       case "GET /api/servers":
-        return json(200, { servers: ["s1.xrea.com", "s10.xrea.com", "s100.xrea.com", "s2.xrea.com"] })
+        return json(200, { servers: state.servers })
       case "GET /api/credentials":
         return json(200, state.registered ? { registered: true, proton: true, expiresAt: "2026-10-18T00:00:00.000Z" } : { registered: false })
       case "PUT /api/credentials":
