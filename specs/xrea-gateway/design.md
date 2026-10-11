@@ -72,6 +72,8 @@ export type ErrorCode =
 | rate_limited     | 503  | XREAが送信間隔の超過を返した             |
 | upstream_error   | 502  | XREAまたはネットワークの異常             |
 
+upstream_error の本文には kind を付け、XREAが拒否したとき（認証情報の誤りを含む）は api、到達できなかったときは network にする。
+
 ### D-2: 一覧と候補 (FR-1, FR-6)
 
 ```ts

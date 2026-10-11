@@ -56,7 +56,7 @@ describe("認証と死活確認", () => {
     xrea.mailList = async () => Promise.reject(new XreaError(500, "認証情報が正しくありません。", "api"))
     let res = await app.request("/v1/aliases", { headers: H })
     expect(res.status).toBe(502)
-    expect(await res.json()).toEqual({ error: { code: "upstream_error", message: "認証情報が正しくありません。" } })
+    expect(await res.json()).toEqual({ error: { code: "upstream_error", message: "認証情報が正しくありません。", kind: "api" } })
     xrea.mailList = async () => Promise.reject(new XreaError(500, "", "rate_limit"))
     res = await app.request("/v1/options", { headers: H })
     expect(res.status).toBe(503)

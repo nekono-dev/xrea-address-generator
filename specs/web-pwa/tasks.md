@@ -15,7 +15,7 @@
 - [x] T-2.2: Service Worker の導入・有効化・要求の処理を実装し、固定の名前で書き出すビルド設定を加える。
 - [x] T-2.3: 配信時のキャッシュの指示と、宣言の Content-Type をサーバに加える。
 - [x] T-2.4: 振り分け・取得・抽出・キャッシュの指示の単体テストを、受け入れ条件のタグ付きで追加する。
-- 検証: `npx vitest run tests/web/sw.test.ts tests/server/cache.test.ts`
+- 検証: `npx vitest run tests/web/sw.test.ts tests/app/http.test.ts`
 - E2E: `tests/e2e/pwa.spec.ts` 一度表示してからオフラインにして再読み込みする → 2秒以内に見出しと発行フォームが表示され、保存領域にAPIの応答が無い
 
 ## Phase 3: 登録とオフラインの帯

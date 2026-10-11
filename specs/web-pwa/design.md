@@ -12,9 +12,9 @@
 | `web/src/sw/sw.ts`                | Service Worker の本体（導入・有効化・要求の処理）        |
 | `web/src/pwa.tsx`                 | Service Worker の登録と、オフラインの帯                  |
 | `vite.config.ts`                  | Service Worker を版のない固定の名前で書き出すビルド設定  |
-| `src/server/app.ts`               | 配信時のキャッシュの指示                                 |
+| `src/app/static.ts`               | 配信時のキャッシュの指示                                 |
 | `tests/web/sw.test.ts`            | 振り分け・通信優先の取得・参照ファイルの抽出の単体テスト |
-| `tests/server/cache.test.ts`      | 配信時のキャッシュの指示のテスト                         |
+| `tests/app/http.test.ts`          | 配信時のキャッシュの指示のテスト                         |
 | `tests/e2e/pwa.spec.ts`           | 宣言・保存・オフライン表示のブラウザテスト               |
 
 ## 2. 設計項目

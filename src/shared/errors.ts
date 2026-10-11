@@ -26,12 +26,16 @@ export class AppError extends Error {
   constructor(
     readonly code: ErrorCode,
     message: string,
+    readonly kind?: ErrorKind,
   ) {
     super(message)
     this.name = "AppError"
   }
 }
 
-export function errorBody(code: ErrorCode | "internal_error", message: string) {
-  return { error: { code, message } }
+/** kind は upstream_error のとき、XREAが拒否した（api）か、到達できなかった（network）かを示す */
+export type ErrorKind = "api" | "network"
+
+export function errorBody(code: ErrorCode | "internal_error", message: string, kind?: ErrorKind) {
+  return { error: kind ? { code, message, kind } : { code, message } }
 }

@@ -33,9 +33,10 @@ export function parseCredentials(body: unknown): Credentials {
   }
 }
 
+/** ログと例外の応答を含む単独のルート。他のルートと同居させるときは registerCredentialRoutes を使う */
 export function credentialRoutes(deps: { store: CredentialStore; verify: Verify; log: Logger }) {
   const app = new Hono<CredentialEnv>()
-  const { store, verify, log } = deps
+  const { log } = deps
 
   app.use("*", async (c, next) => {
     const start = performance.now()
@@ -49,6 +50,14 @@ export function credentialRoutes(deps: { store: CredentialStore; verify: Verify;
     log.error({ route: `${c.req.method} ${c.req.routePath}`, error: (e as Error).name })
     return c.json(errorBody("internal_error", "サーバでエラーが発生しました"), 500)
   })
+
+  registerCredentialRoutes(app, deps)
+  return app
+}
+
+/** PUT・GET /api/credentials を登録する */
+export function registerCredentialRoutes<E extends CredentialEnv>(app: Hono<E>, deps: { store: CredentialStore; verify: Verify }) {
+  const { store, verify } = deps
 
   app.put("/api/credentials", async c => {
     if (!(c.req.header("content-type") ?? "").toLowerCase().startsWith("application/json"))
@@ -82,8 +91,6 @@ export function credentialRoutes(deps: { store: CredentialStore; verify: Verify;
       expiresAt: new Date(reg.expiresAt * 1000).toISOString(),
     })
   })
-
-  return app
 }
 
 /** 保護対象のルートの前段。未登録なら 401 credentials_required。登録済みなら c.set("registration", ...) */

@@ -11,7 +11,7 @@ function toAppError(e: unknown): AppError | null {
   if (e instanceof AppError) return e
   if (e instanceof XreaError) {
     if (e.kind === "rate_limit") return new AppError("rate_limited", "XREAへのリクエストが集中しています。少し待ってから再度お試しください")
-    return new AppError("upstream_error", e.message)
+    return new AppError("upstream_error", e.message, e.kind === "api" ? "api" : "network")
   }
   return null
 }
@@ -30,7 +30,7 @@ export function createGatewayApp(opts: { registry: Registry; internalToken: stri
     const appErr = toAppError(e)
     if (appErr) {
       log.warn({ route: `${c.req.method} ${c.req.routePath}`, code: appErr.code })
-      return c.json(errorBody(appErr.code, appErr.message), STATUS[appErr.code])
+      return c.json(errorBody(appErr.code, appErr.message, appErr.kind), STATUS[appErr.code])
     }
     // 例外の詳細に認証情報が含まれ得るため、名前だけを記録する
     log.error({ route: `${c.req.method} ${c.req.routePath}`, error: (e as Error).name })
