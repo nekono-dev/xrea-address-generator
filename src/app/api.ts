@@ -73,6 +73,10 @@ export function createApi(deps: { service: AppService; store: CredentialStore; l
     return c.json({ alias })
   })
 
+  api.delete("/api/aliases/:address/forward", async c => {
+    return c.json({ alias: await service.removeForward(creds(c), c.req.param("address")) })
+  })
+
   api.delete("/api/aliases/:address", async c => {
     await service.deleteAlias(creds(c), c.req.param("address"))
     return c.body(null, 204)

@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest"
 import { createGatewayApp } from "../../src/gateway/app"
 import { Registry } from "../../src/gateway/registry"
 import { silentLogger } from "../../src/shared/logger"
-import { loadXreaConfig, XreaClient } from "../../src/xrea/client"
+import { createParam, loadXreaConfig, XreaClient } from "../../src/xrea/client"
 
 const domain = process.env.XREA_POC_DOMAIN ?? ""
 const forwardTo = process.env.XREA_POC_FORWARD_TO ?? ""
@@ -42,4 +42,36 @@ describe.runIf(process.env.XREA_LIVE === "1")("実際のAPIに対する発行と
     expect(after.some(m => m.address_name.startsWith("poc"))).toBe(false)
     expect(after.length).toBe(before)
   }, 90_000)
+
+  test("xrea-gateway/AC-16: 検証用メールボックスに転送を追加・変更・解除でき、検証用アドレスが残らない", async () => {
+    await new Promise(r => setTimeout(r, 1500))
+    const cfg = loadXreaConfig()
+    const headers = { authorization: `Bearer ${TOKEN}`, "content-type": "application/json", "x-xrea-account": cfg.account, "x-xrea-server": cfg.serverName, "x-xrea-secret": cfg.apiSecretKey }
+    const app = createGatewayApp({ registry: new Registry(), internalToken: TOKEN, logger: silentLogger })
+    const direct = new XreaClient(cfg)
+    const name = `poc-mbx-${Date.now().toString(36)}`
+    const address = `${name}@${domain}`
+    const path = `/v1/aliases/${encodeURIComponent(address)}`
+    const call = (method: string, p: string, body?: object) => app.request(p, { method, headers, body: body && JSON.stringify(body) })
+    const pause = () => new Promise(r => setTimeout(r, 1500))
+    try {
+      await direct.mailEdit({ reset_flg: 0, param: [{ ...createParam({ name, domain, forwardTo }), pop_how: 2, address_trans: "", pop_pass: "Poc-Pass-12345", pop_pass_rand: 0, quota: 10 }] })
+      await pause() // 直接のクライアントとは送信間隔が共有されないため空ける
+      const added = await (await call("PATCH", path, { forwardTo })).json()
+      expect(added.alias).toMatchObject({ address, forwardTo, mailbox: true })
+      const changed = await (await call("PATCH", path, { forwardTo: forwardTo.replace("@", "+poctest@") })).json()
+      expect(changed.alias.mailbox).toBe(true)
+      const removed = await (await call("DELETE", `${path}/forward`)).json()
+      expect(removed.alias).toMatchObject({ address, forwardTo: "", mailbox: true })
+      expect((await call("DELETE", `${path}/forward`)).status).toBe(403) // 転送が無い
+      expect((await call("DELETE", path)).status).toBe(403) // メールボックスは削除できない
+    } finally {
+      await pause()
+      const list = await direct.mailList()
+      const m = list.find(x => x.address_name === name)
+      if (m) await direct.mailDelete([m.no])
+    }
+    await pause()
+    expect((await direct.mailList()).some(m => m.address_name.startsWith("poc"))).toBe(false)
+  }, 120_000)
 })

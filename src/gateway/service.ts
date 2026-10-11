@@ -14,6 +14,7 @@ export type XreaPort = {
   mailList(): Promise<MailEntry[]>
   mailCreate(input: CreateMailInput): Promise<void>
   mailChangeForward(address: string, forwardTo: string, check: ForwardCheck): Promise<void>
+  mailRemoveForward(address: string, check: ForwardCheck): Promise<void>
   mailDelete(nos: number[]): Promise<void>
 }
 
@@ -81,11 +82,25 @@ export function changeForward(t: Tenant, address: string, forwardTo: string): Pr
     // 一覧の取り直し・アドレスの解決・送信はクライアントが続けて行う（番号のずれを防ぐ）
     await t.xrea.mailChangeForward(address.trim(), to, m => {
       if (!m) throw new AppError("not_found", `${address} は存在しません`)
-      if (m.pop_how !== FORWARD_ONLY) throw new AppError("forbidden", "転送のみのアドレス以外は変更できません")
+      if (![FORWARD_ONLY, ...MAILBOX_KINDS].includes(m.pop_how)) throw new AppError("forbidden", "このアドレスの転送先は変更できません")
       target = m
     })
     t.cache.invalidate()
-    return toGatewayAlias({ ...target!, address_trans: to })
+    // 受信のみのアドレスは、転送の追加で両方になる
+    return toGatewayAlias({ ...target!, pop_how: target!.pop_how === 2 ? 3 : target!.pop_how, address_trans: to })
+  })
+}
+
+export function removeForward(t: Tenant, address: string): Promise<GatewayAlias> {
+  return t.mutex.run(async () => {
+    let target: MailEntry | undefined
+    await t.xrea.mailRemoveForward(address.trim(), m => {
+      if (!m) throw new AppError("not_found", `${address} は存在しません`)
+      if (m.pop_how !== 3) throw new AppError("forbidden", "転送を解除できるのは、転送と受信の両方のアドレスだけです")
+      target = m
+    })
+    t.cache.invalidate()
+    return toGatewayAlias({ ...target!, pop_how: 2, address_trans: "" })
   })
 }
 

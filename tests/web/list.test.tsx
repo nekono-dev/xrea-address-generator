@@ -184,3 +184,29 @@ describe("選択した値の復元", () => {
   })
 })
 
+
+describe("メールボックスの転送", () => {
+  test("web-ui/AC-26: 転送先が空のメールボックス行で転送を追加すると転送先が表示され、確認つきで解除すると表示が消える", async () => {
+    const { r, server } = await mount({ aliases: [alias("box@example.com", [], "", true), alias("both@example.net", [], "me@mail.example", true), alias("shop@example.com")] })
+    const row = (a: string) => r.container.querySelector(`[data-address="${a}"]`)!
+    expect(row("box@example.com").querySelector("[data-edit]")!.textContent).toBe("転送を追加")
+    expect(row("box@example.com").querySelector("[data-unforward], [data-delete]")).toBeNull()
+    expect(row("both@example.net").querySelector("[data-edit]")!.textContent).toBe("変更")
+    expect(row("both@example.net").querySelector("[data-delete]")).toBeNull()
+    expect(row("shop@example.com").querySelector("[data-delete]")).not.toBeNull()
+    // 追加
+    fireEvent.click(row("box@example.com").querySelector("[data-edit]")!)
+    fireEvent.input(row("box@example.com").querySelector("input[role=combobox]")!, { target: { value: "add@mail.example" } })
+    fireEvent.click(row("box@example.com").querySelector("[data-save]")!)
+    await waitFor(() => expect(row("box@example.com").querySelector(".fwd")!.textContent).toBe("→ add@mail.example"))
+    expect(server.requests.at(-1)).toMatchObject({ method: "PATCH", body: { forwardTo: "add@mail.example" } })
+    // 解除: 確認前は要求しない
+    fireEvent.click(row("both@example.net").querySelector("[data-unforward]")!)
+    expect(row("both@example.net").querySelector(".confirm-text")!.textContent).toContain("転送を解除しますか")
+    expect(server.requests.some(q => q.method === "DELETE")).toBe(false)
+    fireEvent.click(row("both@example.net").querySelector("[data-yes]")!)
+    await waitFor(() => expect(row("both@example.net").querySelector(".fwd")).toBeNull())
+    expect(server.requests.filter(q => q.method === "DELETE").map(q => q.url)).toEqual(["/api/aliases/both%40example.net/forward"])
+    expect(row("both@example.net").querySelector("[data-edit]")!.textContent).toBe("転送を追加")
+  })
+})

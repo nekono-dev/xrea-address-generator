@@ -24,18 +24,19 @@
 
 ### D-1: HTTP API (FR-4, FR-5, FR-11)
 
-| メソッドとパス               | 要求                            | 成功応答                        |
-| ---------------------------- | ------------------------------- | ------------------------------- |
-| GET /api/aliases             | なし                            | 200 { aliases, proton }         |
-| POST /api/aliases            | { name?, domain, forwardTo }    | 201 { alias }                   |
-| PATCH /api/aliases/:address  | { forwardTo }                   | 200 { alias }                   |
-| DELETE /api/aliases/:address | アドレスをURLエンコードしたパス | 204                             |
-| GET /api/options             | なし                            | 200 { domains, forwardTargets } |
-| GET /api/proton/status       | なし                            | 200 ProtonStatus                |
-| POST /api/proton/refresh     | なし                            | 202                             |
-| PUT・GET /api/credentials    | 認証情報の登録と問い合わせ      | 認証情報の保持の仕様に従う      |
-| GET /api/servers             | なし（登録前でも呼べる）        | 200 { servers }                 |
-| GET /healthz                 | なし                            | 200 { ok: true }                |
+| メソッドとパス                       | 要求                            | 成功応答                        |
+| ------------------------------------ | ------------------------------- | ------------------------------- |
+| GET /api/aliases                     | なし                            | 200 { aliases, proton }         |
+| POST /api/aliases                    | { name?, domain, forwardTo }    | 201 { alias }                   |
+| PATCH /api/aliases/:address          | { forwardTo }                   | 200 { alias }                   |
+| DELETE /api/aliases/:address         | アドレスをURLエンコードしたパス | 204                             |
+| DELETE /api/aliases/:address/forward | アドレスをURLエンコードしたパス | 200 { alias }                   |
+| GET /api/options                     | なし                            | 200 { domains, forwardTargets } |
+| GET /api/proton/status               | なし                            | 200 ProtonStatus                |
+| POST /api/proton/refresh             | なし                            | 202                             |
+| PUT・GET /api/credentials            | 認証情報の登録と問い合わせ      | 認証情報の保持の仕様に従う      |
+| GET /api/servers                     | なし（登録前でも呼べる）        | 200 { servers }                 |
+| GET /healthz                         | なし                            | 200 { ok: true }                |
 
 ```ts
 export type Alias = {
@@ -138,6 +139,7 @@ export class GatewayClient {
     address: string,
     forwardTo: string,
   ): Promise<GatewayAlias>
+  removeForward(x: XreaCredentials, address: string): Promise<GatewayAlias> // DELETE /v1/aliases/:address/forward
   remove(x: XreaCredentials, address: string): Promise<void>
 }
 

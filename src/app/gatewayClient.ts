@@ -79,6 +79,11 @@ export class GatewayClient {
     return ((await res.json()) as { alias: GatewayAlias }).alias
   }
 
+  async removeForward(x: XreaCredentials, address: string): Promise<GatewayAlias> {
+    const res = await this.call(x, "DELETE", `/v1/aliases/${encodeURIComponent(address)}/forward`)
+    return ((await res.json()) as { alias: GatewayAlias }).alias
+  }
+
   async remove(x: XreaCredentials, address: string): Promise<void> {
     await this.call(x, "DELETE", `/v1/aliases/${encodeURIComponent(address)}`)
   }

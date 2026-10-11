@@ -92,4 +92,36 @@ describe.runIf(env.XREA_LIVE === "1")("実際のAPIに対する契約", () => {
     }
     expect((await client.mailList()).some(m => m.address_name.startsWith("poc-"))).toBe(false)
   }, 90_000)
+
+  test("xrea-client/AC-15: 受信のみの検証用メールボックスに転送を追加・解除しても、パスワードと受信方法・転送先以外の全項目が変わらない", async () => {
+    const name = `poc-mbx-${Date.now().toString(36)}`
+    const mailboxParam = { ...createParam({ name, domain, forwardTo }), pop_how: 2 as const, address_trans: "", pop_pass: "Poc-Pass-12345", pop_pass_rand: 0 as const, quota: 10, clamd: 1 as const }
+    const strip = (m: RawMailEntry) => {
+      const { address_trans, pop_how, ...rest } = m as RawMailEntry & Record<string, unknown>
+      return { rest, address_trans, pop_how }
+    }
+    try {
+      await client.mailEdit({ reset_flg: 0, param: [mailboxParam] })
+      const base = await rawEntry(name)
+      expect(base).toMatchObject({ pop_how: 2, address_trans: "" })
+      const ok = (e: unknown) => {
+        if (!e) throw new Error("作成したアドレスが見つからない")
+      }
+      await client.mailChangeForward(`${name}@${domain}`, forwardTo, ok)
+      const added = await rawEntry(name)
+      expect(strip(added!)).toMatchObject({ pop_how: 3, address_trans: forwardTo })
+      expect(strip(added!).rest).toEqual(strip(base!).rest)
+      expect(sha(added!.pop_pass)).toBe(sha(base!.pop_pass))
+      await client.mailChangeForward(`${name}@${domain}`, forwardTo.replace("@", "+poctest@"), ok)
+      expect(strip((await rawEntry(name))!)).toMatchObject({ pop_how: 3 })
+      await client.mailRemoveForward(`${name}@${domain}`, ok)
+      const removed = await rawEntry(name)
+      expect(strip(removed!)).toMatchObject({ pop_how: 2, address_trans: "" })
+      expect(strip(removed!).rest).toEqual(strip(base!).rest)
+      expect(sha(removed!.pop_pass)).toBe(sha(base!.pop_pass))
+    } finally {
+      await deleteByPrefix("poc-")
+    }
+    expect((await client.mailList()).some(m => m.address_name.startsWith("poc-"))).toBe(false)
+  }, 120_000)
 })

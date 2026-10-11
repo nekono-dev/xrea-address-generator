@@ -87,6 +87,10 @@ export function createGatewayApp(opts: { registry: Registry; internalToken: stri
     return c.json({ alias })
   })
 
+  app.delete("/v1/aliases/:address/forward", async c => {
+    return c.json({ alias: await svc.removeForward(tenantOf(c), c.req.param("address")) })
+  })
+
   app.delete("/v1/aliases/:address", async c => {
     await svc.deleteAlias(tenantOf(c), c.req.param("address"))
     return c.body(null, 204)

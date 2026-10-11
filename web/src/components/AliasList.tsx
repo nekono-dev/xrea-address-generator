@@ -34,7 +34,7 @@ function ProtonLine({ proton, onRefresh }: { proton: ProtonStatus | null; onRefr
 }
 
 function Row({ alias, loading, flash, store }: { alias: Alias; loading: boolean; flash: boolean; store: Store }) {
-  const [confirming, setConfirming] = useState(false)
+  const [confirming, setConfirming] = useState<"delete" | "unforward" | false>(false)
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -56,6 +56,19 @@ function Row({ alias, loading, flash, store }: { alias: Alias; loading: boolean;
       store.toast("コピーしました")
     } catch {
       store.toast("コピーできませんでした")
+    }
+  }
+  async function unforward() {
+    setBusy(true)
+    try {
+      const { alias: next } = await api.removeForward(alias.address)
+      store.add(next) // 同じアドレスの行を置き換える
+      store.toast("転送を解除しました")
+    } catch (e) {
+      store.toast((e as Error).message)
+    } finally {
+      setConfirming(false)
+      setBusy(false)
     }
   }
   async function remove() {
@@ -103,9 +116,9 @@ function Row({ alias, loading, flash, store }: { alias: Alias; loading: boolean;
       <span class="act">
         {confirming ? (
           <span class="confirm">
-            <span class="confirm-text">{confirmText(alias)}</span>
-            <button type="button" class="ghost yes" data-yes disabled={busy} onClick={() => void remove()}>
-              削除
+            <span class="confirm-text">{confirming === "unforward" ? "転送を解除しますか？受信は続きます" : confirmText(alias)}</span>
+            <button type="button" class="ghost yes" data-yes disabled={busy} onClick={() => void (confirming === "unforward" ? unforward() : remove())}>
+              {confirming === "unforward" ? "解除" : "削除"}
             </button>
             <button type="button" class="ghost" data-no ref={cancelRef} onClick={() => setConfirming(false)}>
               やめる
@@ -116,15 +129,19 @@ function Row({ alias, loading, flash, store }: { alias: Alias; loading: boolean;
             <button type="button" class="ghost" data-copy onClick={() => void copy()}>
               コピー
             </button>
-            {!alias.mailbox && (
-              <>
-                <button type="button" class="ghost" data-edit disabled={editing} onClick={() => setEditing(true)}>
-                  変更
+            <button type="button" class="ghost" data-edit disabled={editing} onClick={() => setEditing(true)}>
+              {alias.mailbox && !alias.forwardTo ? "転送を追加" : "変更"}
+            </button>
+            {alias.mailbox ? (
+              alias.forwardTo && (
+                <button type="button" class="ghost danger" data-unforward onClick={() => setConfirming("unforward")}>
+                  転送を解除
                 </button>
-                <button type="button" class="ghost danger" data-delete onClick={() => setConfirming(true)}>
-                  削除
-                </button>
-              </>
+              )
+            ) : (
+              <button type="button" class="ghost danger" data-delete onClick={() => setConfirming("delete")}>
+                削除
+              </button>
             )}
           </>
         )}

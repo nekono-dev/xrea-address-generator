@@ -55,6 +55,11 @@ export function changeForwardParam(raw: RawMailEntry, forwardTo: string): MailEd
   return { ...param, address_trans: forwardTo } as MailEditParam
 }
 
+/** 受信方法（1 転送のみ、2 受信のみ、3 両方）と転送先を差し替える。転送の追加は 2→3、解除は 3→2 */
+export function setForwardParam(raw: RawMailEntry, forwardTo: string, popHow: 1 | 2 | 3): MailEditParam {
+  return { ...changeForwardParam(raw, forwardTo), pop_how: popHow } as MailEditParam
+}
+
 /** 転送先の変更の前に、解決したアドレスを検査する。変更させないときは例外を送出する */
 export type ForwardCheck = (entry: MailEntry | undefined) => asserts entry is MailEntry
 
@@ -115,13 +120,24 @@ export class XreaClient {
     await this.mailEdit({ reset_flg: 0, param: [createParam(input)] })
   }
 
-  /** 一覧を取り直してアドレスを解決し、check の検査を通ったものだけ転送先を変更する */
-  async mailChangeForward(address: string, forwardTo: string, check: ForwardCheck): Promise<void> {
+  /** 一覧を取り直してアドレスを解決し、check の検査を通ったものだけを、plan が返す受信方法と転送先で再送信する */
+  private async editForward(address: string, check: ForwardCheck, plan: (e: RawMailEntry) => { forwardTo: string; popHow: 1 | 2 | 3 }): Promise<void> {
     const key = address.toLowerCase()
     const raw = (await this.rawList()).find(m => `${m.address_name}@${m.address_domain}`.toLowerCase() === key)
     check(raw && omitSecret(raw))
     // 一覧の取得の直後に送る（削除や変更の後に、ほかのアドレスの番号が変わり得るため）
-    await this.mailEdit({ reset_flg: 0, param: [changeForwardParam(raw!, forwardTo)] })
+    const p = plan(raw!)
+    await this.mailEdit({ reset_flg: 0, param: [setForwardParam(raw!, p.forwardTo, p.popHow)] })
+  }
+
+  /** 転送先を設定する。受信のみ（2）のアドレスでは転送を追加して受信方法を両方（3）にし、ほかは受信方法を保つ */
+  async mailChangeForward(address: string, forwardTo: string, check: ForwardCheck): Promise<void> {
+    await this.editForward(address, check, e => ({ forwardTo, popHow: e.pop_how === 2 ? 3 : (e.pop_how as 1 | 3) }))
+  }
+
+  /** 転送を解除する。受信方法を受信のみ（2）にし、転送先を空にする */
+  async mailRemoveForward(address: string, check: ForwardCheck): Promise<void> {
+    await this.editForward(address, check, () => ({ forwardTo: "", popHow: 2 }))
   }
 
   async mailDelete(nos: number[]): Promise<void> {

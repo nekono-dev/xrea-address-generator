@@ -15,7 +15,31 @@ test.describe("一覧と行の操作", () => {
     await expect(rows).toHaveText(["b@example.com", "a@example.com"])
   })
 
-  test("web-ui/AC-25: メールボックスを持つ行に印が付き、コピーだけが操作でき、絞り込みと件数の対象になる", async ({ page }) => {
+  test("web-ui/AC-26: メールボックスの行で転送を追加・変更でき、確認つきで解除すると転送先の表示が消える", async ({ page }) => {
+    const api = await mockApi(page, { aliases: [alias("box@example.com", [], "", true), alias("both@example.net", [], "me@mail.example", true)] })
+    await page.goto("/")
+    const box = page.locator('[data-address="box@example.com"]')
+    await box.locator("[data-edit]").click()
+    await box.getByRole("combobox").fill("add@mail.example")
+    await page.keyboard.press("Enter") // 候補リストが保存ボタンに重なるため、Enterで確定する
+    await expect(box.locator(".fwd")).toHaveText("→ add@mail.example")
+    await expect(box.locator("[data-edit]")).toHaveText("変更")
+    expect(api.requests.some(r => r.method === "PATCH" && r.body.forwardTo === "add@mail.example")).toBe(true)
+    // 解除は確認してから要求する
+    await box.locator("[data-unforward]").click()
+    await expect(box.locator(".confirm-text")).toHaveText("転送を解除しますか？受信は続きます")
+    expect(api.requests.some(r => r.method === "DELETE")).toBe(false)
+    await box.locator("[data-no]").click()
+    await expect(box.locator(".fwd")).toHaveCount(1)
+    await box.locator("[data-unforward]").click()
+    await box.locator("[data-yes]").click()
+    await expect(box.locator(".fwd")).toHaveCount(0)
+    await expect(box.locator("[data-edit]")).toHaveText("転送を追加")
+    expect(api.requests.filter(r => r.method === "DELETE").map(r => r.path)).toEqual(["/api/aliases/box%40example.com/forward"])
+    expect(await page.locator('[data-address="box@example.com"] [data-delete]').count()).toBe(0)
+  })
+
+  test("web-ui/AC-25: メールボックスを持つ行に印が付き、削除が操作できず、絞り込みと件数の対象になる", async ({ page }) => {
     await mockApi(page, { aliases: [alias("fwd@example.com"), alias("box@example.com", [], "", true), alias("both@example.net", [], "me@mail.example", true)] })
     await page.goto("/")
     await expect(page.locator("#count")).toHaveText("3件")
@@ -23,10 +47,13 @@ test.describe("一覧と行の操作", () => {
     await expect(box.locator(".chip.box")).toHaveText("メールボックス")
     await expect(box.locator(".fwd")).toHaveCount(0) // 転送先が無い行は転送先を出さない
     await expect(box.locator("[data-copy]")).toHaveCount(1)
-    await expect(box.locator("[data-edit], [data-delete]")).toHaveCount(0)
+    await expect(box.locator("[data-edit]")).toHaveText("転送を追加")
+    await expect(box.locator("[data-delete], [data-unforward]")).toHaveCount(0)
     const both = page.locator('[data-address="both@example.net"]')
     await expect(both.locator(".fwd")).toHaveText("→ me@mail.example")
-    await expect(both.locator("[data-edit], [data-delete]")).toHaveCount(0)
+    await expect(both.locator("[data-edit]")).toHaveText("変更")
+    await expect(both.locator("[data-unforward]")).toHaveText("転送を解除")
+    await expect(both.locator("[data-delete]")).toHaveCount(0)
     await expect(page.locator('[data-address="fwd@example.com"] .chip.box')).toHaveCount(0)
     await expect(page.locator('[data-address="fwd@example.com"] [data-edit]')).toHaveCount(1)
     await page.locator("#filter .dd-btn").click()

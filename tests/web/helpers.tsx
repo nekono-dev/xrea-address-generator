@@ -21,7 +21,7 @@ export function fakeServer(init: { aliases?: Alias[]; proton?: ProtonStatus; dom
   const requests: { method: string; url: string; body: any }[] = []
   const overrides: Record<string, Handler> = {}
   const handle: Handler = ({ method, url, body }) => {
-    const key = `${method} ${url.replace(/\/api\/aliases\/.+$/, "/api/aliases/:address")}`
+    const key = `${method} ${url.endsWith("/forward") ? "/api/aliases/:address/forward" : url.replace(/\/api\/aliases\/.+$/, "/api/aliases/:address")}`
     if (overrides[key]) return overrides[key]!({ method, url, body })
     switch (key) {
       case "GET /api/servers":
@@ -43,6 +43,13 @@ export function fakeServer(init: { aliases?: Alias[]; proton?: ProtonStatus; dom
         const a = state.aliases.find(x => x.address === address)
         if (!a) return { status: 404, body: { error: { code: "not_found", message: `${address} は存在しません` } } }
         a.forwardTo = body.forwardTo
+        return { status: 200, body: { alias: { ...a } } }
+      }
+      case "DELETE /api/aliases/:address/forward": {
+        const address = decodeURIComponent(url.split("/").at(-2)!)
+        const a = state.aliases.find(x => x.address === address)
+        if (!a || !a.mailbox || !a.forwardTo) return { status: 403, body: { error: { code: "forbidden", message: "転送を解除できません" } } }
+        a.forwardTo = ""
         return { status: 200, body: { alias: { ...a } } }
       }
       case "DELETE /api/aliases/:address": {

@@ -133,20 +133,41 @@ describe("削除・転送先の変更", () => {
     expect(xrea.deleted).toHaveLength(1)
   })
 
-  test("xrea-gateway/AC-5: 解決したアドレスと新しい転送先が渡され、転送のみ以外は403、形式不正は400", async () => {
+  test("xrea-gateway/AC-5: 解決したアドレスと新しい転送先が渡され、受信のみは両方になり、転送のみと両方は受信方法を保ち、存在しないものは404、形式不正は400", async () => {
     const { xrea, patch, app } = setup()
     await app.request("/v1/aliases", { headers: H })
     const res = await patch("SNS@example.net", { forwardTo: " new@mail.example " })
     expect(res.status).toBe(200)
     expect((await res.json()).alias).toEqual({ address: "sns@example.net", name: "sns", domain: "example.net", forwardTo: "new@mail.example", mailbox: false })
-    expect(xrea.changed).toEqual([{ no: 3, forwardTo: "new@mail.example" }])
+    expect(xrea.changed).toEqual([{ no: 3, forwardTo: "new@mail.example", popHow: 1 }])
     const after = (await (await app.request("/v1/aliases", { headers: H })).json()).aliases
     expect(after.find((a: any) => a.address === "sns@example.net").forwardTo).toBe("new@mail.example")
+    // 受信のみは転送の追加で両方になり、両方は受信方法を保つ
+    const added = await patch("mail@example.com", { forwardTo: "add@mail.example" })
+    expect([added.status, (await added.json()).alias]).toEqual([200, { address: "mail@example.com", name: "mail", domain: "example.com", forwardTo: "add@mail.example", mailbox: true }])
+    expect(xrea.changed.at(-1)).toEqual({ no: 1, forwardTo: "add@mail.example", popHow: 3 })
+    expect((await patch("mail@example.net", { forwardTo: "n@mail.example" })).status).toBe(200)
+    expect(xrea.changed.at(-1)).toMatchObject({ no: 4, popHow: 3 })
     expect((await patch("none@example.com", { forwardTo: "n@mail.example" })).status).toBe(404)
-    expect((await patch("mail@example.net", { forwardTo: "n@mail.example" })).status).toBe(403)
+    const n = xrea.changed.length
     for (const forwardTo of ["not-mail", "", "a b@c.d"]) expect((await patch("shop@example.com", { forwardTo })).status).toBe(400)
     expect((await patch("shop@example.com", {})).status).toBe(400)
-    expect(xrea.changed).toHaveLength(1)
+    expect(xrea.changed).toHaveLength(n)
+  })
+
+  test("xrea-gateway/AC-16: 転送の解除で両方のアドレスが受信のみになって転送先が空で返り、転送のみと受信のみは403、存在しないものは404", async () => {
+    const { xrea, app } = setup()
+    const rm = (a: string) => app.request(`/v1/aliases/${encodeURIComponent(a)}/forward`, { method: "DELETE", headers: H })
+    const ok = await rm("MAIL@example.net")
+    expect([ok.status, (await ok.json()).alias]).toEqual([200, { address: "mail@example.net", name: "mail", domain: "example.net", forwardTo: "", mailbox: true }])
+    expect(xrea.removed).toEqual([4])
+    expect(xrea.mails.find(m => m.no === 4)).toMatchObject({ pop_how: 2, address_trans: "" })
+    for (const a of ["shop@example.com", "mail@example.com", "mail@example.net"]) expect((await rm(a)).status, a).toBe(403)
+    expect((await rm("none@example.com")).status).toBe(404)
+    expect(xrea.removed).toEqual([4])
+    // 解除後の一覧では、転送先が空のメールボックスになる
+    const list = (await (await app.request("/v1/aliases", { headers: H })).json()).aliases
+    expect(list.find((a: any) => a.address === "mail@example.net")).toMatchObject({ forwardTo: "", mailbox: true })
   })
 
   test("xrea-gateway/AC-13: XREAの応答を1.2秒遅らせても、発行・転送先の変更・削除の応答が5秒以内に返る", async () => {

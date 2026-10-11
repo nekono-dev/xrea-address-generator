@@ -62,6 +62,10 @@ export class AppService {
     return this.withEntries(c, await this.gateway.changeForward(c.xrea, address, forwardTo))
   }
 
+  async removeForward(c: Credentials, address: string): Promise<Alias> {
+    return this.withEntries(c, await this.gateway.removeForward(c.xrea, address))
+  }
+
   deleteAlias(c: Credentials, address: string): Promise<void> {
     return this.gateway.remove(c.xrea, address)
   }

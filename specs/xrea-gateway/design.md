@@ -7,7 +7,7 @@
 | `src/gateway/main.ts`           | 設定の読み込みと起動                                 |
 | `src/gateway/config.ts`         | 環境変数の読み込みと検証                             |
 | `src/gateway/app.ts`            | ルーティング、共有シークレットの検査、エラー応答     |
-| `src/gateway/service.ts`        | 一覧、発行、転送先の変更、削除、候補の導出           |
+| `src/gateway/service.ts`        | 一覧、発行、転送の設定・解除、削除、候補の導出       |
 | `src/gateway/registry.ts`       | アカウントごとのクライアント・キャッシュ・排他の保持 |
 | `src/gateway/listCache.ts`      | 一覧のキャッシュ                                     |
 | `src/gateway/mutex.ts`          | 変更要求の直列化                                     |
@@ -25,14 +25,15 @@
 
 ### D-1: HTTP API と認証 (FR-7, FR-11)
 
-| メソッドとパス              | 要求                            | 成功応答                        |
-| --------------------------- | ------------------------------- | ------------------------------- |
-| GET /v1/aliases             | なし                            | 200 { aliases }                 |
-| POST /v1/aliases            | { name?, domain, forwardTo }    | 201 { alias }                   |
-| PATCH /v1/aliases/:address  | { forwardTo }                   | 200 { alias }                   |
-| DELETE /v1/aliases/:address | アドレスをURLエンコードしたパス | 204                             |
-| GET /v1/options             | なし                            | 200 { domains, forwardTargets } |
-| GET /healthz                | なし                            | 200 { ok: true }                |
+| メソッドとパス                      | 要求                            | 成功応答                        |
+| ----------------------------------- | ------------------------------- | ------------------------------- |
+| GET /v1/aliases                     | なし                            | 200 { aliases }                 |
+| POST /v1/aliases                    | { name?, domain, forwardTo }    | 201 { alias }                   |
+| PATCH /v1/aliases/:address          | { forwardTo }                   | 200 { alias }                   |
+| DELETE /v1/aliases/:address         | アドレスをURLエンコードしたパス | 204                             |
+| DELETE /v1/aliases/:address/forward | アドレスをURLエンコードしたパス | 200 { alias }                   |
+| GET /v1/options                     | なし                            | 200 { domains, forwardTargets } |
+| GET /healthz                        | なし                            | 200 { ok: true }                |
 
 ```ts
 // /healthz 以外の全ルートの前段
@@ -86,7 +87,7 @@ export async function listAliases(t: Tenant): Promise<GatewayAlias[]> {
       name: m.address_name,
       domain: m.address_domain,
       forwardTo: m.address_trans,
-      mailbox: m.pop_how === 2 || m.pop_how === 3, // 表示のみで、変更・削除はできない
+      mailbox: m.pop_how === 2 || m.pop_how === 3, // 削除はできない。転送の追加・変更・解除はできる
     }))
 }
 
@@ -142,7 +143,7 @@ export function randomName(
 
 単語の辞書は、小文字の英単語256語を固定で持つ。
 
-### D-4: 削除と転送先の変更 (FR-4, FR-5)
+### D-4: 削除と転送の設定・解除 (FR-4, FR-5, FR-12)
 
 ```ts
 export async function deleteAlias(t: Tenant, address: string): Promise<void> {
@@ -171,20 +172,42 @@ export async function changeForward(
     // 一覧の取り直し・アドレスの解決・送信はクライアントが続けて行う（番号のずれを防ぐ）
     await t.xrea.mailChangeForward(address, forwardTo.trim(), (m) => {
       if (!m) throw new AppError("not_found")
-      if (m.pop_how !== 1) throw new AppError("forbidden")
+      if (![1, 2, 3].includes(m.pop_how)) throw new AppError("forbidden")
       target = m
     })
     t.cache.invalidate()
-    return toGatewayAlias({ ...target!, address_trans: forwardTo.trim() }) // 一覧を再び取得しない
+    const popHow = target!.pop_how === 2 ? 3 : target!.pop_how
+    return toGatewayAlias({
+      ...target!,
+      pop_how: popHow,
+      address_trans: forwardTo.trim(),
+    })
+  })
+}
+
+export async function removeForward(
+  t: Tenant,
+  address: string,
+): Promise<GatewayAlias> {
+  return t.mutex.run(async () => {
+    let target: MailEntry | undefined
+    await t.xrea.mailRemoveForward(address, (m) => {
+      if (!m) throw new AppError("not_found")
+      if (m.pop_how !== 3) throw new AppError("forbidden")
+      target = m
+    })
+    t.cache.invalidate()
+    return toGatewayAlias({ ...target!, pop_how: 2, address_trans: "" })
   })
 }
 ```
 
-| 事象                   | 応答                    |
-| ---------------------- | ----------------------- |
-| 一覧に存在しない       | 404                     |
-| 受信方法が転送のみ以外 | 403                     |
-| 現在と同じ転送先       | XREAへ送信して200を返す |
+| 事象                                             | 応答                    |
+| ------------------------------------------------ | ----------------------- |
+| 一覧に存在しない                                 | 404                     |
+| 削除の対象が転送のみ以外、転送の設定の対象が破棄 | 403                     |
+| 転送の解除の対象が両方以外                       | 403                     |
+| 現在と同じ転送先                                 | XREAへ送信して200を返す |
 
 ### D-5: アカウントごとの保持・排他・キャッシュ (FR-8, FR-10, NFR-3, NFR-4)
 

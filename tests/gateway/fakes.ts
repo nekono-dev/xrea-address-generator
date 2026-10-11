@@ -10,7 +10,8 @@ export class FakeXrea implements XreaPort {
   calls: string[] = []
   created: CreateMailInput[] = []
   deleted: number[][] = []
-  changed: { no: number; forwardTo: string }[] = []
+  removed: number[] = []
+  changed: { no: number; forwardTo: string; popHow: number }[] = []
   delayMs = 0
   log: { op: string; start: number; end: number }[] = []
 
@@ -43,8 +44,18 @@ export class FakeXrea implements XreaPort {
     const m = mails.find(x => `${x.address_name}@${x.address_domain}`.toLowerCase() === address.toLowerCase())
     check(m)
     await this.step("change", () => {
-      this.changed.push({ no: m.no, forwardTo })
-      this.mails = this.mails.map(x => (x.no === m.no ? { ...x, address_trans: forwardTo } : x))
+      const popHow = m.pop_how === 2 ? 3 : m.pop_how // 受信のみは転送の追加で両方になる
+      this.changed.push({ no: m.no, forwardTo, popHow })
+      this.mails = this.mails.map(x => (x.no === m.no ? { ...x, address_trans: forwardTo, pop_how: popHow } : x))
+    })
+  }
+
+  async mailRemoveForward(address: string, check: ForwardCheck): Promise<void> {
+    const m = (await this.mailList()).find(x => `${x.address_name}@${x.address_domain}`.toLowerCase() === address.toLowerCase())
+    check(m)
+    await this.step("remove-forward", () => {
+      this.removed.push(m.no)
+      this.mails = this.mails.map(x => (x.no === m.no ? { ...x, address_trans: "", pop_how: 2 } : x))
     })
   }
 

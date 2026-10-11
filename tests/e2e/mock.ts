@@ -41,7 +41,7 @@ export async function mockApi(page: Page, init: { aliases?: Alias[]; proton?: Pr
     const body = req.postData() ? JSON.parse(req.postData()!) : undefined
     requests.push({ method: req.method(), path: url.pathname, body })
     const json = (status: number, b?: unknown) => route.fulfill({ status, contentType: "application/json", body: b === undefined ? "" : JSON.stringify(b) })
-    const key = `${req.method()} ${url.pathname.startsWith("/api/aliases/") ? "/api/aliases/:address" : url.pathname}`
+    const key = `${req.method()} ${url.pathname.endsWith("/forward") ? "/api/aliases/:address/forward" : url.pathname.startsWith("/api/aliases/") ? "/api/aliases/:address" : url.pathname}`
     // 保護対象のAPIは、未登録（期限切れを含む）なら登録を求める
     if (!state.registered && !url.pathname.startsWith("/api/credentials") && url.pathname !== "/api/servers")
       return json(401, { error: { code: "credentials_required", message: "認証情報を登録してください" } })
@@ -71,6 +71,13 @@ export async function mockApi(page: Page, init: { aliases?: Alias[]; proton?: Pr
         const a = state.aliases.find(x => x.address === address)
         if (!a) return json(404, { error: { code: "not_found", message: `${address} は存在しません` } })
         a.forwardTo = body.forwardTo
+        return json(200, { alias: a })
+      }
+      case "DELETE /api/aliases/:address/forward": {
+        const address = decodeURIComponent(url.pathname.split("/").at(-2)!)
+        const a = state.aliases.find(x => x.address === address)
+        if (!a || !a.mailbox || !a.forwardTo) return json(403, { error: { code: "forbidden", message: "転送を解除できません" } })
+        a.forwardTo = ""
         return json(200, { alias: a })
       }
       case "DELETE /api/aliases/:address": {

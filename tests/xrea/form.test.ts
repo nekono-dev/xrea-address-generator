@@ -131,3 +131,52 @@ describe("転送先の変更の送信内容", () => {
     expect(r.calls).toHaveLength(1)
   })
 })
+
+describe("メールボックスの転送の追加・解除の送信内容", () => {
+  const box = (popHow: number, trans: string) => ({
+    no: 9, address_name: "box", address_domain: "example.com", address: "box@example.com", pop_how: popHow, address_trans: trans,
+    pop_pass: "REAL-MAILBOX-PASS", quota: "10", quota_use_byte: 5, quota_use_per: 1, mail_num: 2, autorespond: 0, clamd: 1, spamd: 1, customd: 0,
+  })
+  function edits(entry: unknown) {
+    const calls: { url: string; body: URLSearchParams }[] = []
+    const fetch = async (url: string, init: { body: URLSearchParams }) => {
+      calls.push({ url, body: init.body })
+      const res = url.endsWith("/list") ? { status_code: 200, result: { "1": entry } } : { status_code: 200 }
+      return { status: 200, text: async () => JSON.stringify(res) }
+    }
+    return { calls, client: new XreaClient(config, { fetch, queue: noWait() }) }
+  }
+  const check = (e: unknown) => {
+    if (!e) throw new Error("not found")
+  }
+
+  test("xrea-client/AC-15: 受信のみのアドレスへの転送の追加は受信方法を両方にし、パスワードとそのほかの項目を保つ", async () => {
+    const { calls, client } = edits(box(2, ""))
+    await client.mailChangeForward("BOX@example.com", "fwd@mail.example", check)
+    const b = calls[1]!.body
+    expect(b.get("param[0][pop_how]")).toBe("3")
+    expect(b.get("param[0][address_trans]")).toBe("fwd@mail.example")
+    expect(b.get("param[0][pop_pass]")).toBe("REAL-MAILBOX-PASS")
+    expect(b.get("param[0][quota]")).toBe("10")
+    expect(b.get("param[0][no]")).toBe("9")
+    expect(b.get("param[0][clamd]")).toBe("1")
+    for (const k of ["mail_num", "quota_use_byte", "quota_use_per"]) expect(b.has(`param[0][${k}]`)).toBe(false)
+  })
+
+  test("xrea-client/AC-15: 両方のアドレスの転送先の変更は受信方法を保ち、解除は受信のみにして転送先を空にする", async () => {
+    const change = edits(box(3, "old@mail.example"))
+    await change.client.mailChangeForward("box@example.com", "new@mail.example", check)
+    expect(change.calls[1]!.body.get("param[0][pop_how]")).toBe("3")
+    const remove = edits(box(3, "old@mail.example"))
+    await remove.client.mailRemoveForward("box@example.com", check)
+    const b = remove.calls[1]!.body
+    expect(remove.calls.map(c => c.url.replace("https://api.xrea.com", ""))).toEqual(["/v1/mail/list", "/v1/mail/edit"])
+    expect(b.get("param[0][pop_how]")).toBe("2")
+    expect(b.get("param[0][address_trans]")).toBe("")
+    expect(b.get("param[0][pop_pass]")).toBe("REAL-MAILBOX-PASS")
+    // 検査が例外を送出したときは、編集の要求を送らない
+    const none = edits(box(3, "x@mail.example"))
+    await expect(none.client.mailRemoveForward("other@example.com", check)).rejects.toThrow("not found")
+    expect(none.calls).toHaveLength(1)
+  })
+})

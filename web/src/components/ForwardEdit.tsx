@@ -24,7 +24,7 @@ export function ForwardEdit({ alias, store, onDone }: { alias: Alias; store: Sto
       store.add(next) // 同じアドレスの行を置き換える
       // 新しい転送先を候補にも加える
       store.set(s => ({ options: { ...s.options, forwardTargets: [...new Set([...s.options.forwardTargets, next.forwardTo])].sort() } }))
-      store.toast("転送先を変更しました")
+      store.toast(alias.forwardTo ? "転送先を変更しました" : "転送を追加しました")
       onDone()
     } catch (e) {
       store.toast((e as Error).message) // 入力は保持する
@@ -35,7 +35,7 @@ export function ForwardEdit({ alias, store, onDone }: { alias: Alias; store: Sto
   return (
     <div class="fedit" ref={root}>
       <div class="line">
-        <Combobox id={`fwd-${alias.address}`} label={`${alias.address} の転送先`} value={value} candidates={candidates} onInput={setValue} onEnter={() => void save()} onEscape={onDone} autoFocus />
+        <Combobox id={`fwd-${alias.address}`} label={`${alias.address} の転送先`} placeholder={alias.forwardTo ? undefined : "転送先のメールアドレス"} value={value} candidates={candidates} onInput={setValue} onEnter={() => void save()} onEscape={onDone} autoFocus />
       </div>
       <div class="fedit-act">
         <button type="button" class="ghost yes-acc" data-save disabled={!ok} onClick={() => void save()}>

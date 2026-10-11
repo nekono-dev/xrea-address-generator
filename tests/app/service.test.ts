@@ -46,6 +46,20 @@ describe("ゲートウェイへの中継", () => {
     for (const s of relayed) expect(s.headers["x-xrea-account"]).toBe("acct")
   })
 
+  test("alias-service/AC-21: 転送の解除の要求が認証情報を添えてゲートウェイへ中継され、解除後の項目が返る", async () => {
+    const { app, register, seen, xrea } = await makeApp()
+    const cookie = await register()
+    const res = await app.request(`/api/aliases/${encodeURIComponent("mail@example.net")}/forward`, { method: "DELETE", headers: { cookie } })
+    expect(res.status).toBe(200)
+    expect((await res.json()).alias).toMatchObject({ address: "mail@example.net", forwardTo: "", mailbox: true, protonEntries: [] })
+    expect(xrea.removed).toEqual([4])
+    const relayed = seen.gateway.find(s => s.method === "DELETE")!
+    expect(new URL(relayed.url).pathname).toBe("/v1/aliases/mail%40example.net/forward")
+    expect(relayed.headers["x-xrea-secret"]).toBe("XREA-SECRET-KEY")
+    const forbidden = await app.request(`/api/aliases/${encodeURIComponent("shop@example.com")}/forward`, { method: "DELETE", headers: { cookie } })
+    expect([forbidden.status, (await forbidden.json()).error.code]).toEqual([403, "forbidden"])
+  })
+
   test("alias-service/AC-6: 不正なJSONの本文は400 validation_error になる", async () => {
     const { app, register, json } = await makeApp()
     const res = await app.request("/api/aliases", { method: "POST", headers: { ...json, cookie: await register() }, body: "{" })
