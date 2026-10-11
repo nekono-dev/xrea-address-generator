@@ -3,7 +3,7 @@ import { AliasService, AppError } from "../../src/server/aliasService"
 import { createApp } from "../../src/server/app"
 import { randomName } from "../../src/server/randomName"
 import { WORDS } from "../../src/server/words"
-import { FakeProton, FakeXrea, sampleMails } from "./fakes"
+import { FakeProton, FakeXrea, mail, sampleMails } from "./fakes"
 
 const silent = { info: () => undefined, warn: () => undefined, error: () => undefined }
 const entries = new Map([
@@ -18,10 +18,17 @@ function setup(opts: { proton?: FakeProton; rnd?: () => number } = {}) {
 }
 
 describe("一覧・候補・照合状態", () => {
-  test("alias-service/AC-1: 転送のみ・受信のみ・両方のアドレスを含む一覧から、転送のみのアドレスだけが返る", async () => {
-    const { service } = setup()
+  test("alias-service/AC-1: 転送のみ・受信のみ・両方・破棄のアドレスを含む一覧から、破棄を除くアドレスが返り、メールボックスを持つものに印が付く", async () => {
+    const service = new AliasService({ xrea: new FakeXrea([...sampleMails(), mail(6, "gone", "example.org", 4)]), proton: new FakeProton(entries) })
     const { aliases } = await service.listAliases()
-    expect(aliases.map(a => a.address)).toEqual(["bank@example.org", "shop@example.com", "sns@example.net"])
+    expect(aliases.map(a => [a.address, a.mailbox])).toEqual([
+      ["bank@example.org", false],
+      ["mail@example.com", true],
+      ["mail@example.net", true],
+      ["shop@example.com", false],
+      ["sns@example.net", false],
+    ])
+    expect(aliases.find(a => a.address === "mail@example.net")!.forwardTo).toBe("me@mail.example")
   })
 
   test("alias-service/AC-2: エントリ名を持つアドレスの一覧の項目に、そのエントリ名が昇順で含まれる", async () => {
@@ -33,6 +40,7 @@ describe("一覧・候補・照合状態", () => {
       domain: "example.net",
       forwardTo: "sub@mail.example",
       protonEntries: ["Bluesky", "X (Twitter)"],
+      mailbox: false,
     })
     expect(aliases.find(a => a.address === "bank@example.org")!.protonEntries).toEqual([])
   })
@@ -41,7 +49,7 @@ describe("一覧・候補・照合状態", () => {
     const loading = new FakeProton(new Map(), { state: "loading", updatedAt: null, reloginAt: null, itemCount: null, error: null })
     const { service } = setup({ proton: loading })
     const r = await service.listAliases()
-    expect(r.aliases).toHaveLength(3)
+    expect(r.aliases).toHaveLength(5)
     expect(r.proton.state).toBe("loading")
   })
 
@@ -68,7 +76,7 @@ describe("発行", () => {
     const { service, xrea } = setup()
     const alias = await service.createAlias({ name: "Travel", domain: "example.net", forwardTo: "sub@mail.example" })
     expect(xrea.created).toEqual([{ name: "travel", domain: "example.net", forwardTo: "sub@mail.example" }])
-    expect(alias).toEqual({ address: "travel@example.net", name: "travel", domain: "example.net", forwardTo: "sub@mail.example", protonEntries: [] })
+    expect(alias).toEqual({ address: "travel@example.net", name: "travel", domain: "example.net", forwardTo: "sub@mail.example", protonEntries: [], mailbox: false })
     expect(xrea.mails.find(m => m.address_name === "travel")!.pop_how).toBe(1)
   })
 
@@ -163,7 +171,7 @@ describe("転送先の変更", () => {
     await service.listAliases() // キャッシュを作る
     const res = await patch(app, "SNS@example.net", { forwardTo: " new@mail.example " })
     expect(res.status).toBe(200)
-    expect((await res.json()).alias).toEqual({ address: "sns@example.net", name: "sns", domain: "example.net", forwardTo: "new@mail.example", protonEntries: ["Bluesky", "X (Twitter)"] })
+    expect((await res.json()).alias).toEqual({ address: "sns@example.net", name: "sns", domain: "example.net", forwardTo: "new@mail.example", protonEntries: ["Bluesky", "X (Twitter)"], mailbox: false })
     expect(xrea.changed).toEqual([{ no: 3, forwardTo: "new@mail.example" }])
     // 変更の成功時にキャッシュを破棄する
     const after = (await service.listAliases()).aliases.find(a => a.address === "sns@example.net")

@@ -48,7 +48,7 @@ describe("状態の保持", () => {
     const s = createStore()
     let n = 0
     s.subscribe(() => n++)
-    const a = { address: "a@x", name: "a", domain: "x", forwardTo: "f@x", protonEntries: [] }
+    const a = { address: "a@x", name: "a", domain: "x", forwardTo: "f@x", protonEntries: [], mailbox: false }
     s.add(a)
     s.add({ ...a, forwardTo: "g@x" })
     expect(s.get().aliases).toHaveLength(1)
@@ -62,7 +62,7 @@ describe("状態の保持", () => {
   })
 
   test("絞り込みと並び替え", () => {
-    const mk = (address: string, domain: string) => ({ address, name: "", domain, forwardTo: "", protonEntries: [] })
+    const mk = (address: string, domain: string) => ({ address, name: "", domain, forwardTo: "", protonEntries: [], mailbox: false })
     const list = [mk("b@x.com", "x.com"), mk("a@y.com", "y.com"), mk("c@x.com", "x.com")]
     expect(view(list, null, "asc").map(a => a.address)).toEqual(["a@y.com", "b@x.com", "c@x.com"])
     expect(view(list, "x.com", "desc").map(a => a.address)).toEqual(["c@x.com", "b@x.com"])

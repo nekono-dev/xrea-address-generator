@@ -75,8 +75,15 @@ function Row({ alias, loading, flash, store }: { alias: Alias; loading: boolean;
   return (
     <div class={`row${flash ? " flash" : ""}`} ref={ref} data-address={alias.address}>
       <div class="a">
-        <div class="addr">{alias.address}</div>
-        {editing ? <ForwardEdit alias={alias} store={store} onDone={() => setEditing(false)} /> : <small class="fwd">→ {alias.forwardTo}</small>}
+        <div class="addr">
+          {alias.address}
+          {alias.mailbox && <span class="chip box">メールボックス</span>}
+        </div>
+        {editing ? (
+          <ForwardEdit alias={alias} store={store} onDone={() => setEditing(false)} />
+        ) : (
+          (!alias.mailbox || alias.forwardTo) && <small class="fwd">→ {alias.forwardTo}</small>
+        )}
         {loading ? (
           <div class="chips" aria-label="照合中">
             <span class="chip sk" />
@@ -109,12 +116,16 @@ function Row({ alias, loading, flash, store }: { alias: Alias; loading: boolean;
             <button type="button" class="ghost" data-copy onClick={() => void copy()}>
               コピー
             </button>
-            <button type="button" class="ghost" data-edit disabled={editing} onClick={() => setEditing(true)}>
-              変更
-            </button>
-            <button type="button" class="ghost danger" data-delete onClick={() => setConfirming(true)}>
-              削除
-            </button>
+            {!alias.mailbox && (
+              <>
+                <button type="button" class="ghost" data-edit disabled={editing} onClick={() => setEditing(true)}>
+                  変更
+                </button>
+                <button type="button" class="ghost danger" data-delete onClick={() => setConfirming(true)}>
+                  削除
+                </button>
+              </>
+            )}
           </>
         )}
       </span>

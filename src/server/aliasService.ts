@@ -8,7 +8,8 @@ import { randomName } from "./randomName"
 import { MAIL_RE, normalizeName, validate, type CreateInput } from "./validate"
 import { WORDS } from "./words"
 
-export type Alias = { address: string; name: string; domain: string; forwardTo: string; protonEntries: string[] }
+/** mailbox は、メールボックスを持つ（受信のみ・転送と受信の両方の）アドレス。表示だけで、変更・削除はできない */
+export type Alias = { address: string; name: string; domain: string; forwardTo: string; protonEntries: string[]; mailbox: boolean }
 export type ErrorCode = "validation_error" | "forbidden" | "not_found" | "conflict" | "upstream_error" | "rate_limited"
 
 export class AppError extends Error {
@@ -29,13 +30,14 @@ export type XreaPort = {
 }
 
 const FORWARD_ONLY = 1
+const MAILBOX_KINDS = [2, 3] // 受信のみ・転送と受信の両方
 const MAX_RANDOM_TRIES = 5
 const addressOf = (m: { address_name: string; address_domain: string }) => `${m.address_name}@${m.address_domain}`.toLowerCase()
 
-/** 応答に載せるのは5項目のみ。MailEntry を直接返さない */
-function toAlias(m: Pick<MailEntry, "address_name" | "address_domain" | "address_trans">, entries: AddressMap): Alias {
+/** 応答に載せるのは6項目のみ。MailEntry を直接返さない */
+function toAlias(m: Pick<MailEntry, "address_name" | "address_domain" | "address_trans"> & { pop_how?: number }, entries: AddressMap): Alias {
   const address = addressOf(m)
-  return { address, name: m.address_name, domain: m.address_domain, forwardTo: m.address_trans ?? "", protonEntries: [...(entries.get(address) ?? [])] }
+  return { address, name: m.address_name, domain: m.address_domain, forwardTo: m.address_trans ?? "", protonEntries: [...(entries.get(address) ?? [])], mailbox: MAILBOX_KINDS.includes(m.pop_how ?? FORWARD_ONLY) }
 }
 
 export function deriveOptions(mails: readonly MailEntry[]): { domains: string[]; forwardTargets: string[] } {
@@ -60,7 +62,7 @@ export class AliasService {
     const mails = await this.listCache.get()
     const entries = this.deps.proton.getMap() // 待たずに現在の対応表を取る
     const aliases = mails
-      .filter(m => m.pop_how === FORWARD_ONLY)
+      .filter(m => m.pop_how === FORWARD_ONLY || MAILBOX_KINDS.includes(m.pop_how))
       .map(m => toAlias(m, entries))
       .sort((a, b) => a.address.localeCompare(b.address))
     return { aliases, proton: this.deps.proton.getStatus() }

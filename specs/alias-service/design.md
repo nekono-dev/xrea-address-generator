@@ -88,7 +88,7 @@ export async function listAliases(): Promise<{
   const mails = await listCache.get() // XREAの一覧（正規化済み）
   const entries = proton.getMap() // 待たずに現在の対応表を取る
   const aliases = mails
-    .filter((m) => m.pop_how === 1) // 転送のみだけを残す
+    .filter((m) => [1, 2, 3].includes(m.pop_how)) // 破棄以外を残す
     .map((m) => {
       const address = `${m.address_name}@${m.address_domain}`.toLowerCase()
       return {
@@ -97,18 +97,19 @@ export async function listAliases(): Promise<{
         domain: m.address_domain,
         forwardTo: m.address_trans,
         protonEntries: [...(entries.get(address) ?? [])],
+        mailbox: m.pop_how === 2 || m.pop_how === 3, // メールボックスを持つ（表示のみで、変更・削除はできない）
       }
     })
   return { aliases, proton: proton.getStatus() }
 }
 ```
 
-| 受信方法の値 | 意味             | 一覧への掲載 |
-| ------------ | ---------------- | ------------ |
-| 1            | 転送のみ         | 掲載する     |
-| 2            | 受信のみ         | 掲載しない   |
-| 3            | 転送と受信の両方 | 掲載しない   |
-| 4            | 破棄             | 掲載しない   |
+| 受信方法の値 | 意味             | 一覧への掲載 | mailbox |
+| ------------ | ---------------- | ------------ | ------- |
+| 1            | 転送のみ         | 掲載する     | false   |
+| 2            | 受信のみ         | 掲載する     | true    |
+| 3            | 転送と受信の両方 | 掲載する     | true    |
+| 4            | 破棄             | 掲載しない   | -       |
 
 ### D-3: 発行 (FR-4, FR-5, FR-6, FR-7)
 

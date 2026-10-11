@@ -1,12 +1,12 @@
 // E2E用の疑似API。ブラウザからの /api への要求を横取りして応答する。
 import type { Page } from "@playwright/test"
 
-export type Alias = { address: string; name: string; domain: string; forwardTo: string; protonEntries: string[] }
+export type Alias = { address: string; name: string; domain: string; forwardTo: string; protonEntries: string[]; mailbox: boolean }
 export type ProtonStatus = { state: string; updatedAt: string | null; reloginAt: string | null; itemCount: number | null; error: null | { kind: string; message: string } }
 
-export const alias = (address: string, protonEntries: string[] = [], forwardTo = "me@mail.example"): Alias => {
+export const alias = (address: string, protonEntries: string[] = [], forwardTo = "me@mail.example", mailbox = false): Alias => {
   const [name, domain] = address.split("@") as [string, string]
-  return { address, name, domain, forwardTo, protonEntries }
+  return { address, name, domain, forwardTo, protonEntries, mailbox }
 }
 export const ready = (o: Partial<ProtonStatus> = {}): ProtonStatus => ({ state: "ready", updatedAt: "2026-10-10T01:23:00.000Z", reloginAt: null, itemCount: 315, error: null, ...o })
 

@@ -1,5 +1,5 @@
 // サーバとの通信と型。
-export type Alias = { address: string; name: string; domain: string; forwardTo: string; protonEntries: string[] }
+export type Alias = { address: string; name: string; domain: string; forwardTo: string; protonEntries: string[]; mailbox: boolean }
 export type ProtonStatus = {
   state: "loading" | "ready" | "relogin" | "error" | "disabled"
   updatedAt: string | null

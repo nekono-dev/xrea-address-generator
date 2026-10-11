@@ -15,6 +15,25 @@ test.describe("一覧と行の操作", () => {
     await expect(rows).toHaveText(["b@example.com", "a@example.com"])
   })
 
+  test("web-ui/AC-25: メールボックスを持つ行に印が付き、コピーだけが操作でき、絞り込みと件数の対象になる", async ({ page }) => {
+    await mockApi(page, { aliases: [alias("fwd@example.com"), alias("box@example.com", [], "", true), alias("both@example.net", [], "me@mail.example", true)] })
+    await page.goto("/")
+    await expect(page.locator("#count")).toHaveText("3件")
+    const box = page.locator('[data-address="box@example.com"]')
+    await expect(box.locator(".chip.box")).toHaveText("メールボックス")
+    await expect(box.locator(".fwd")).toHaveCount(0) // 転送先が無い行は転送先を出さない
+    await expect(box.locator("[data-copy]")).toHaveCount(1)
+    await expect(box.locator("[data-edit], [data-delete]")).toHaveCount(0)
+    const both = page.locator('[data-address="both@example.net"]')
+    await expect(both.locator(".fwd")).toHaveText("→ me@mail.example")
+    await expect(both.locator("[data-edit], [data-delete]")).toHaveCount(0)
+    await expect(page.locator('[data-address="fwd@example.com"] .chip.box')).toHaveCount(0)
+    await expect(page.locator('[data-address="fwd@example.com"] [data-edit]')).toHaveCount(1)
+    await page.locator("#filter .dd-btn").click()
+    await page.locator("#filter [role=option]", { hasText: "example.com" }).click()
+    await expect(page.locator("#count")).toHaveText("2件")
+  })
+
   test("web-ui/AC-9: 削除を押して確認すると、確認前は削除が送信されず、確認文にエントリ名が含まれる", async ({ page }) => {
     const api = await mockApi(page)
     await page.goto("/")

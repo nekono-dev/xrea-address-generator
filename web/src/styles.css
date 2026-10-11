@@ -371,6 +371,12 @@ h1 {
   border-radius: 6px;
   padding: 2px 8px;
 }
+.chip.box {
+  margin-left: 8px;
+  vertical-align: middle;
+  color: #7dd3fc;
+  background: #0c4a6e;
+}
 .chip.sk {
   width: 90px;
   height: 18px;

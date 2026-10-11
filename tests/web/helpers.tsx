@@ -1,9 +1,9 @@
 // 画面の単体テスト用の補助（偽のサーバ）。
 import { setFetch, type Alias, type ProtonStatus } from "../../web/src/api"
 
-export const alias = (address: string, protonEntries: string[] = [], forwardTo = "me@mail.example"): Alias => {
+export const alias = (address: string, protonEntries: string[] = [], forwardTo = "me@mail.example", mailbox = false): Alias => {
   const [name, domain] = address.split("@") as [string, string]
-  return { address, name, domain, forwardTo, protonEntries }
+  return { address, name, domain, forwardTo, protonEntries, mailbox }
 }
 export const ready = (o: Partial<ProtonStatus> = {}): ProtonStatus => ({ state: "ready", updatedAt: "2026-10-10T01:23:00.000Z", reloginAt: null, itemCount: 315, error: null, ...o })
 
