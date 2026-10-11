@@ -360,6 +360,7 @@ h1 {
 }
 /* 広告ブロッカーが .ad を非表示にするため、別の名前にする */
 .row .addr {
+  padding: 1px 0;
   overflow: hidden;
   text-overflow: ellipsis;
   word-break: break-all;
@@ -384,6 +385,10 @@ h1 {
 }
 .chip.box {
   margin-left: 8px;
+  /* 行の高さに収め、.addr の overflow で下が切れないようにする */
+  display: inline-block;
+  line-height: 1.2;
+  padding: 1px 8px;
   vertical-align: middle;
   color: #7dd3fc;
   background: #0c4a6e;
@@ -564,6 +569,11 @@ h1 {
   color: var(--acc);
   font-size: var(--fs-s);
 }
+.cred-hint {
+  margin: 0;
+  color: var(--muted, var(--fg));
+  font-size: var(--fs-s);
+}
 .cred-error {
   margin: 0;
   color: var(--danger);
@@ -585,7 +595,8 @@ h1 {
   .btn {
     flex: 1 0 100%;
   }
-  .fld.al {
+  .fld.al,
+  #name.fld {
     flex: 1 0 40%;
   }
   /* 行の操作ボタンはアドレスの下へ回し、アドレスを全幅で表示する */
@@ -615,6 +626,16 @@ h1 {
 }
 
 /* 発行フォームのドメイン（自由入力）。名前と幅を分け合い、狭い画面では折り返しても潰れない */
-#domain.cb {
+#domain.cb,
+#name.fld {
   flex: 1 1 40%;
+}
+
+/* アクセストークン欄はtype=searchのまま伏せ字にする（type=passwordだとProton Passの新規パスワード作成が出るため） */
+.fld.secret {
+  -webkit-text-security: disc;
+  appearance: none;
+}
+.fld.secret::-webkit-search-cancel-button {
+  display: none;
 }

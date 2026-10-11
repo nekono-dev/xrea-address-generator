@@ -2,16 +2,21 @@
 
 ## 1. 構成
 
-| パス                         | 責務                                                              |
-| ---------------------------- | ----------------------------------------------------------------- |
-| `wrangler.toml`              | Workersの配備の定義（スクリプト、画面ファイル、変数、秘密の名前） |
-| `web/public/_headers`        | 画面ファイルのキャッシュの指示                                    |
-| `scripts/cloud/check.ts`     | コンテナ基盤の要件の検査と、配備後の疎通確認                      |
-| `docs/cloud-deploy.md`       | 構成の図と配備の手順（Workers、Cloud Run、秘匿値の設定）          |
-| `tests/cloud/config.test.ts` | 配備の定義・ヘッダ・秘匿値の非混入のテスト                        |
-| `tests/cloud/check.test.ts`  | 要件の検査と疎通確認の単体テスト                                  |
-| `tests/cloud/cpu.test.ts`    | 一覧の要求のCPU時間のテスト                                       |
-| `tests/cloud/doc.test.ts`    | 手順書の図と手順の内容のテスト                                    |
+| パス                          | 責務                                                               |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `wrangler.jsonc`              | Workersの配備の定義（スクリプト、画面ファイル、変数、秘密の名前）  |
+| `web/public/_headers`         | 画面ファイルのキャッシュの指示                                     |
+| `scripts/cloud/check.ts`      | コンテナ基盤の要件の検査と、配備後の疎通確認                       |
+| `scripts/cloud/deploy.ts`     | 構成例の一括配備（`npm run deploy:cloud`）                         |
+| `scripts/cloud/destroy.ts`    | 構成例の一括撤去（`npm run destroy:cloud`）                        |
+| `docs/cloud-deploy.md`        | 構成の図と配備の手順（Workers、Cloud Run、秘匿値の設定）           |
+| `docs/cloud-operations.md`    | 配備後の運用の手順（保持方式、秘密値の更新、失効、インスタンス数） |
+| `tests/cloud/config.test.ts`  | 配備の定義・ヘッダ・秘匿値の非混入のテスト                         |
+| `tests/cloud/check.test.ts`   | 要件の検査と疎通確認の単体テスト                                   |
+| `tests/cloud/deploy.test.ts`  | 一括配備の順序・冪等性・秘匿値の扱いのテスト                       |
+| `tests/cloud/destroy.test.ts` | 一括撤去の順序・冪等性のテスト                                     |
+| `tests/cloud/cpu.test.ts`     | 一覧の要求のCPU時間のテスト                                        |
+| `tests/cloud/doc.test.ts`     | 手順書の図と手順の内容のテスト                                     |
 
 ## 2. 設計項目
 
@@ -160,11 +165,76 @@ openssl rand -base64 48 | tr -d '\n' | gcloud secrets create xrea-internal-token
 
 ゲートウェイと読み取りサービスは環境変数 PORT を読むため、Cloud Run が設定する値でそのまま待ち受ける。
 
+### D-7: 運用の手順書 (FR-11)
+
+運用の手順書は `docs/cloud-operations.md` に置き、次の順に構成する。
+
+| 節                 | 内容                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------- |
+| 保持方式           | クラウドは cookie 方式に固定する。複数インスタンスと Workers でローカルのSQLiteを共有できないため             |
+| 秘密値の保管       | COOKIE_SECRET の控えを Secret Manager に置く。Workers の秘密は読み戻せないため、更新の旧値の出どころになる    |
+| 秘密値の更新       | 直前の秘密値を設定してから現行を差し替え、7日後に直前の秘密値を削除する。利用者は再登録しない                 |
+| 全利用者の失効     | 直前の秘密値を設定せずに現行を差し替える。盗まれたcookieを個別には失効できない                                |
+| インスタンス数     | ゲートウェイは要求の直列化のため、読み取りサービスはセッションの保存先を持つため、最大インスタンス数を1にする |
+| 共有ストアの採用時 | 失効とログアウトが必要になった時点の選択肢（D1、Postgres）と、本アプリの対象外であること                      |
+
+```sh
+# 更新: 旧値を直前の秘密値へ、新しい値を現行へ。順序を守ると、途中の状態でも全員の cookie が有効なままになる
+gcloud secrets versions access latest --secret=xrea-cookie-secret | npx wrangler secret put COOKIE_SECRET_PREVIOUS
+openssl rand -base64 48 | tr -d '\n' | gcloud secrets versions add xrea-cookie-secret --data-file=-
+gcloud secrets versions access latest --secret=xrea-cookie-secret | npx wrangler secret put COOKIE_SECRET
+# 7日後
+npx wrangler secret delete COOKIE_SECRET_PREVIOUS
+```
+
+### D-8: 一括配備と一括撤去 (FR-12)
+
+`npm run deploy:cloud` は `scripts/cloud/deploy.ts` を実行する。外部コマンドの実行は差し替え可能な実行環境（読み取りの `query` と、変更を伴う `exec`）を通し、テストでは呼び出しの記録で検証する。
+
+| 入力                    | 内容                                                       |
+| ----------------------- | ---------------------------------------------------------- |
+| `PROJECT_ID`            | 必須。Google Cloud のプロジェクトID                        |
+| `CLOUDFLARE_ACCOUNT_ID` | 必須。Cloudflare のアカウントID                            |
+| `REGION`                | 任意。既定は `asia-northeast1`                             |
+| `IMAGE_TAG`             | 任意。既定は `v1`。更新のたびに変えない                    |
+| `APP_URL`               | 任意。あれば最後に疎通確認を実行する                       |
+| `--no-reader`           | 読み取りサービスを配備せず、`PROTON_READER_URL` を空にする |
+| `--dry-run`             | 読み取りだけ実行し、変更を伴う操作は表示だけにする         |
+
+配備の順序と冪等性:
+
+| 順  | 対象                                        | 処理                                                                                                                                    |
+| --- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Google Cloud の準備                         | API の有効化。リポジトリが無ければ作成。共有シークレットが無ければ標準入力で作成（あれば変更しない）。読み取りの許可の付与              |
+| 2   | コンテナ（ゲートウェイ → 読み取りサービス） | ビルド → サービスがあれば削除 → イメージ（同じタグ）があれば `--delete-tags` で削除 → push → デプロイ（最大1、Secret Manager 注入）     |
+| 3   | Workers                                     | ビルド → `INTERNAL_TOKEN` を Secret Manager から標準入力で設定 → `COOKIE_SECRET` は未設定のときだけ作成 → `--var` でURLを渡してデプロイ |
+| 4   | 疎通確認                                    | `APP_URL` があれば `probe` を実行し、失敗があれば終了コード1                                                                            |
+
+- 時間のかかるビルドを削除の前に済ませ、サービスの停止を push とデプロイの間に限る。
+- URL は `wrangler deploy --var` で渡し、個人用の `wrangler.jsonc` を書き換えない。定義は `wrangler.jsonc` があればそれを、無ければ雛形を使う。
+- Cloudflare Access の設定は含めない。
+
+一括撤去（`npm run destroy:cloud`、`scripts/cloud/destroy.ts`）は同じ実行環境を使い、存在を確認してから削除する。確認なしでは実行せず、`--yes` か PROJECT_ID の入力を求める。
+
+| 順  | 対象              | 処理                                               |
+| --- | ----------------- | -------------------------------------------------- |
+| 1   | Workers           | スクリプト、画面ファイル、秘密を削除する           |
+| 2   | Cloud Run         | ゲートウェイと読み取りサービスのサービスを削除する |
+| 3   | Artifact Registry | リポジトリをイメージごと削除する                   |
+| 4   | Secret Manager    | 共有シークレットと COOKIE_SECRET の控えを削除する  |
+| 5   | 手元              | ビルドしたイメージを削除する                       |
+
+ログ、Cloudflare Access、DNS、有効化した API は対象外とし、手順書で手動の確認を促す。
+
+手順書は、共通の事前準備、クイックスタート、配備手順、配備後の作業の順に構成する。
+
 ## 3. エラー処理
 
-| 事象                   | 処理                                              |
-| ---------------------- | ------------------------------------------------- |
-| ゲートウェイのURLが空  | Workersが500で応答し、設定の不足を示す            |
-| 要件の検査で違反       | 違反の説明を表示して終了コード1で終了する         |
-| 疎通確認の失敗         | 失敗した検査の名前を表示して終了コード1で終了する |
-| 疎通確認が60秒を超える | 打ち切って終了コード1で終了する                   |
+| 事象                     | 処理                                                |
+| ------------------------ | --------------------------------------------------- |
+| ゲートウェイのURLが空    | Workersが500で応答し、設定の不足を示す              |
+| 要件の検査で違反         | 違反の説明を表示して終了コード1で終了する           |
+| 疎通確認の失敗           | 失敗した検査の名前を表示して終了コード1で終了する   |
+| 疎通確認が60秒を超える   | 打ち切って終了コード1で終了する                     |
+| 必須の環境変数が無い     | 不足の変数名を表示して終了コード2で終了する         |
+| 一括配備のコマンドの失敗 | 失敗した工程を表示して、そこで終了コード1で終了する |

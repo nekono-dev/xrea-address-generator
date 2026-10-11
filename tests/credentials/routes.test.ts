@@ -14,14 +14,15 @@ beforeAll(async () => {
   store = createCookieStore(await deriveKey("a".repeat(32)), { secure: true })
 })
 
-function setup(verify: (x: unknown) => Promise<boolean> = async () => true) {
+type Check = "disabled" | "available" | "unavailable"
+function setup(verify: (x: unknown) => Promise<boolean> = async () => true, protonCheck: () => Promise<Check> = async () => "available") {
   const lines: string[] = []
   const log = {
     info: (o: object) => lines.push(JSON.stringify(o)),
     warn: (o: object) => lines.push(JSON.stringify(o)),
     error: (o: object) => lines.push(JSON.stringify(o)),
   }
-  const app = credentialRoutes({ store, verify, log })
+  const app = credentialRoutes({ store, verify, protonCheck, log })
   const put = (b: unknown, headers: Record<string, string> = { "content-type": "application/json" }) =>
     app.request("/api/credentials", { method: "PUT", headers, body: JSON.stringify(b) })
   return { app, put, lines }
@@ -56,6 +57,16 @@ describe("登録と問い合わせ", () => {
     expect((await down.put(body)).status).toBe(502)
   })
 
+  test("credential-session/AC-25: ログアウトが有効期間0のcookieを返す204になり、登録済みでも未登録でも成功する", async () => {
+    const { app, put } = setup()
+    const cookie = (await put(body)).headers.get("set-cookie")!.split(";")[0]!
+    for (const headers of [{ cookie }, {} as Record<string, string>]) {
+      const res = await app.request("/api/credentials", { method: "DELETE", headers })
+      expect(res.status).toBe(204)
+      expect(res.headers.get("set-cookie")).toMatch(/^xag_session=; Max-Age=0;.*HttpOnly.*SameSite=Strict/)
+    }
+  })
+
   test("credential-session/AC-7: 登録後の問い合わせが登録済みと期限を返し、秘匿値を含まない", async () => {
     const { app, put } = setup()
     const cookie = (await put(body)).headers.get("set-cookie")!.split(";")[0]!
@@ -69,6 +80,20 @@ describe("登録と問い合わせ", () => {
     expect(text).not.toContain("TOKEN-XYZ")
     const none = await app.request("/api/credentials")
     expect(await none.json()).toEqual({ registered: false })
+  })
+
+  test("credential-session/AC-26: 登録済みの問い合わせで、7日の有効期間のcookieが再発行され、同じ認証情報を取り出せる", async () => {
+    const { app, put } = setup()
+    const cookie = (await put(body)).headers.get("set-cookie")!.split(";")[0]!
+    const res = await app.request("/api/credentials", { headers: { cookie } })
+    const renewed = res.headers.get("set-cookie")!
+    expect(renewed).toMatch(/^xag_session=[^;]+; Max-Age=604800;.*HttpOnly.*SameSite=Strict/)
+    const j = await res.json()
+    expect(new Date(j.expiresAt).getTime()).toBeGreaterThan(Date.now() + 6.9 * 24 * 3600 * 1000)
+    const again = await app.request("/api/credentials", { headers: { cookie: renewed.split(";")[0]! } })
+    expect((await again.json()).proton).toBe(true)
+    // 未登録の問い合わせではcookieを発行しない
+    expect((await app.request("/api/credentials")).headers.get("set-cookie")).toBeNull()
   })
 
   test("credential-session/AC-7: Proton Passトークン未指定では proton が false", async () => {
@@ -113,5 +138,55 @@ describe("設定", () => {
     expect(c).toMatchObject({ store: "cookie", secure: true })
     expect(loadCredentialConfig({ COOKIE_SECRET: "a".repeat(32), COOKIE_SECURE: "0" }).secure).toBe(false)
     expect(() => loadCredentialConfig({ COOKIE_SECRET: "a".repeat(32), CREDENTIAL_STORE: "x" })).toThrow(ConfigError)
+  })
+})
+
+describe("連携の利用可否", () => {
+  const registered = async (res: Response, app: { request: (p: string, i?: RequestInit) => Response | Promise<Response> }) => {
+    const cookie = res.headers.get("set-cookie")?.split(";")[0] ?? ""
+    return app.request("/api/credentials", { headers: { cookie } })
+  }
+
+  test("credential-session/AC-18: 連携が未設定または利用不可のとき200 { proton } が返り、XREAの認証情報だけが保持される", async () => {
+    for (const state of ["disabled", "unavailable"] as const) {
+      const { app, put } = setup(undefined, async () => state)
+      const res = await put(body)
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ proton: state })
+      const cookie = res.headers.get("set-cookie") ?? ""
+      expect(cookie).toContain("xag_session=")
+      const info = await (await registered(res, app)).json()
+      expect(info).toMatchObject({ registered: true, proton: false })
+      const reg = await store.load(cookie.split(";")[0] ?? null)
+      expect(reg?.credentials).toEqual({ xrea: body.xrea, protonToken: null })
+    }
+    // 確認が例外のときも利用不可として扱う
+    const { put } = setup(undefined, async () => {
+      throw new Error("boom")
+    })
+    const res = await put(body)
+    expect([res.status, await res.json()]).toEqual([200, { proton: "unavailable" }])
+  })
+
+  test("credential-session/AC-17: 連携が利用可能のとき204が返り、トークンが保持される", async () => {
+    const { app, put } = setup()
+    const res = await put(body)
+    expect(res.status).toBe(204)
+    expect(await (await registered(res, app)).json()).toMatchObject({ proton: true })
+  })
+
+  test("credential-session/AC-19: トークンを含まない登録の要求では、利用可否の確認が呼び出されず204が返る", async () => {
+    const check = vi.fn(async (): Promise<Check> => "available")
+    const { put } = setup(undefined, check)
+    expect((await put({ xrea: body.xrea })).status).toBe(204)
+    expect((await put({ xrea: body.xrea, protonToken: "" })).status).toBe(204)
+    expect(check).not.toHaveBeenCalled()
+  })
+
+  test("credential-session/AC-20: 疎通の確認が失敗する登録の要求では、利用可否の確認が呼び出されない", async () => {
+    const check = vi.fn(async (): Promise<Check> => "available")
+    const { put } = setup(async () => false, check)
+    expect((await put(body)).status).toBe(400)
+    expect(check).not.toHaveBeenCalled()
   })
 })

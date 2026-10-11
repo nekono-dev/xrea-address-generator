@@ -15,7 +15,7 @@ describe("seal", () => {
     const sealed = await seal(key, cred)
     expect(sealed.startsWith("v1.")).toBe(true)
     expect(sealed).not.toContain("SECRET-KEY-VALUE")
-    expect(atob(sealed.slice(3).replace(/-/g, "+").replace(/_/g, "/"))).not.toContain("SECRET-KEY-VALUE")
+    expect(atob(sealed.slice(sealed.indexOf(".", 3) + 1).replace(/-/g, "+").replace(/_/g, "/"))).not.toContain("SECRET-KEY-VALUE")
     expect(await open(key, sealed)).toEqual(cred)
   })
 

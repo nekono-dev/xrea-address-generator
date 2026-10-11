@@ -23,11 +23,12 @@ export type Seen = { url: string; method: string; headers: Record<string, string
 export function makeFetch(opts: {
   xrea?: FakeXrea
   reader?: (req: Request) => Response | Promise<Response>
+  health?: (req: Request) => Response | Promise<Response> // 死活確認（既定は200）
   gatewayDelayMs?: number
 }) {
   const xrea = opts.xrea ?? new FakeXrea(sampleMails())
   const gateway = createGatewayApp({ registry: new Registry(100, 600_000, Date.now, () => xrea), internalToken: INTERNAL, logger: silentLogger })
-  const seen: { gateway: Seen[]; reader: Seen[] } = { gateway: [], reader: [] }
+  const seen: { gateway: Seen[]; reader: Seen[]; health: Seen[] } = { gateway: [], reader: [], health: [] }
   const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const req = new Request(input as string, init)
     // 実物の fetch と同じく、中断の信号で待機を打ち切る
@@ -41,6 +42,10 @@ export function makeFetch(opts: {
       seen.gateway.push(rec)
       if (opts.gatewayDelayMs) await new Promise(r => setTimeout(r, opts.gatewayDelayMs))
       return gateway.fetch(req)
+    }
+    if (u.pathname === "/health") {
+      seen.health.push(rec)
+      return opts.health ? opts.health(req) : Response.json({ ok: true })
     }
     seen.reader.push(rec)
     return opts.reader ? opts.reader(req) : defaultReader()

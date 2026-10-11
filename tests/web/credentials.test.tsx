@@ -27,15 +27,19 @@ async function mountMissing() {
   const store = createStore()
   const r = render(<App store={store} />)
   await waitFor(() => expect(r.container.querySelector("#credentials")).not.toBeNull())
+  await waitFor(() => expect(r.container.querySelector("#cred-proton")).not.toBeNull()) // 利用可否の取得を待つ
   return { r, server, store }
 }
 
 describe("状態", () => {
   test("web-credentials/AC-1: 未登録の応答を受けると登録画面だけが表示され、一覧と発行フォームの要求が送信されない", async () => {
     const { r, server } = await mountMissing()
+    expect(r.container.querySelector(".cred-app")!.textContent).toBe("ALIAS GENERATOR")
+    expect(r.container.querySelector("#cred-title")!.textContent).toBe("XREAへログイン")
+    expect(r.container.querySelector("#cred-submit")!.textContent).toBe("ログイン")
     expect(r.container.querySelector("#issue")).toBeNull()
     expect(r.container.querySelector(".row")).toBeNull()
-    expect(server.requests.map(q => `${q.method} ${q.url}`).filter(q => q !== "GET /api/servers")).toEqual(["GET /api/credentials"])
+    expect(server.requests.map(q => `${q.method} ${q.url}`).filter(q => q !== "GET /api/servers" && q !== "GET /api/capabilities")).toEqual(["GET /api/credentials"])
   })
 
   test("登録状態を問い合わせている間は何も描画しない", async () => {
@@ -69,7 +73,7 @@ describe("状態", () => {
 })
 
 describe("パネル", () => {
-  test("web-credentials/AC-2: 3項目のいずれかが空のとき登録ボタンが無効で、すべて入力すると有効になる", async () => {
+  test("web-credentials/AC-2: 3項目のいずれかが空のときログインボタンが無効で、すべて入力すると有効になる", async () => {
     const { r } = await mountMissing()
     expect(submitBtn(r.container).disabled).toBe(true)
     type(r.container, "server", "s1.xrea.com")
@@ -152,7 +156,7 @@ describe("パネル", () => {
     await waitFor(() => expect(r.container.querySelector(".cred-error")!.textContent).toBe("サーバへ接続できません"))
   })
 
-  test("送信中は登録ボタンが無効になり、二重に送信されない", async () => {
+  test("送信中はログインボタンが無効になり、二重に送信されない", async () => {
     const { r, server } = await mountMissing()
     let release!: () => void
     server.overrides["PUT /api/credentials"] = () => new Promise(res => (release = () => res({ status: 204 })))
@@ -173,7 +177,8 @@ describe("パネル", () => {
     fireEvent.submit(r.container.querySelector("form")!)
     await waitFor(() => expect(r.container.querySelector("#credentials")).toBeNull())
     const dump = JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage })
-    for (const v of ["SECRET-KEY-VALUE", "PROTON-PAT-VALUE", "acct", "s1.xrea.com"]) expect(dump).not.toContain(v)
+    for (const v of ["SECRET-KEY-VALUE", "PROTON-PAT-VALUE", "acct"]) expect(dump).not.toContain(v)
+    expect(JSON.stringify({ ...localStorage })).toContain("s1.xrea.com") // サーバ名だけは次回の初期値として保存する
     expect(location.href).not.toContain("SECRET")
   })
 
@@ -193,20 +198,31 @@ describe("パネル", () => {
   })
 })
 
-describe("置き換えと取り消し", () => {
-  test("web-credentials/AC-8: 登録済みの状態でヘッダのボタンを押すと登録画面が開き、取り消しで主画面に戻る", async () => {
-    fakeServer()
+describe("ログアウト", () => {
+  test("web-credentials/AC-8: 登録済みの状態でヘッダのログアウトを押すと、登録画面に切り替わり、一覧の内容が残らない", async () => {
+    const server = fakeServer()
     const r = render(<App store={createStore()} />)
     await waitFor(() => expect(r.container.querySelectorAll(".row").length).toBeGreaterThan(0))
-    fireEvent.click(r.container.querySelector("#cred-open")!)
-    expect(r.container.querySelector("#credentials")).not.toBeNull()
+    const btn = r.container.querySelector("#cred-logout")!
+    expect(btn.textContent).toBe("ログアウト")
+    fireEvent.click(btn)
+    await waitFor(() => expect(r.container.querySelector("#credentials")).not.toBeNull())
+    expect(server.requests.some(q => q.method === "DELETE" && q.url === "/api/credentials")).toBe(true)
+    expect(r.container.querySelectorAll(".row")).toHaveLength(0)
+    expect(r.container.querySelector("#cred-logout")).toBeNull()
+    expect(r.container.querySelector("#cred-cancel")).toBeNull()
     expect(r.container.querySelector(".cred-notice")).toBeNull()
-    type(r.container, "username", "typed")
-    fireEvent.click(r.container.querySelector("#cred-cancel")!)
-    await waitFor(() => expect(r.container.querySelector("#credentials")).toBeNull())
+  })
+
+  test("web-credentials/AC-8: ログアウトが失敗すると通知され、主画面に留まる", async () => {
+    const server = fakeServer()
+    server.overrides["DELETE /api/credentials"] = () => ({ status: 500, body: { error: { code: "internal_error", message: "サーバでエラーが発生しました" } } })
+    const r = render(<App store={createStore()} />)
+    await waitFor(() => expect(r.container.querySelectorAll(".row").length).toBeGreaterThan(0))
+    fireEvent.click(r.container.querySelector("#cred-logout")!)
+    await waitFor(() => expect(r.container.textContent).toContain("ログアウトに失敗しました"))
+    expect(r.container.querySelector("#credentials")).toBeNull()
     expect(r.container.querySelectorAll(".row").length).toBeGreaterThan(0)
-    fireEvent.click(r.container.querySelector("#cred-open")!)
-    expect(input(r.container, "username").value).toBe("") // 取り消し時の入力値は破棄する
   })
 })
 
@@ -225,7 +241,7 @@ describe("サーバ名", () => {
     expect(r.container.querySelector("form")!.contains(input(r.container, "server"))).toBe(false)
   })
 
-  test("web-credentials/AC-15: 一覧にないサーバ名では登録ボタンが無効で、一覧の取得に失敗したときは自由入力で登録できる", async () => {
+  test("web-credentials/AC-15: 一覧にないサーバ名ではログインボタンが無効で、一覧の取得に失敗したときは自由入力で登録できる", async () => {
     const { r } = await mountMissing()
     await waitFor(() => expect(options(r.container).length).toBe(4))
     fill(r.container)
@@ -243,5 +259,62 @@ describe("サーバ名", () => {
     fill(r2.container)
     type(r2.container, "server", "anything.example.net")
     expect(submitBtn(r2.container).disabled).toBe(false)
+  })
+})
+
+describe("連携", () => {
+  const cap = (proton: string) => (server: ReturnType<typeof fakeServer>) => {
+    server.overrides["GET /api/capabilities"] = () => ({ status: 200, body: { proton } })
+  }
+  const hint = (c: Element) => c.querySelector(".cred-hint")?.textContent ?? null
+
+  async function mountWith(setup: (s: ReturnType<typeof fakeServer>) => void) {
+    const server = fakeServer()
+    server.overrides["GET /api/credentials"] = () => missing
+    setup(server)
+    const store = createStore()
+    const r = render(<App store={store} />)
+    await waitFor(() => expect(r.container.querySelector("#credentials")).not.toBeNull())
+    await waitFor(() => expect(server.requests.some(q => q.url === "/api/capabilities")).toBe(true))
+    await new Promise(res => setTimeout(res, 0))
+    return { r, server, store }
+  }
+
+  test("web-credentials/AC-16: 表示時に利用可否を1回だけ取得し、利用可能のときだけ連携ボタンが出て、取得に失敗したときは連携ボタンも一文も出ない", async () => {
+    const ok = await mountWith(cap("available"))
+    await waitFor(() => expect(ok.r.container.querySelector("#cred-proton")).not.toBeNull())
+    expect(ok.server.requests.filter(q => q.url === "/api/capabilities")).toHaveLength(1)
+    expect(hint(ok.r.container)).toBeNull()
+    cleanup()
+    const ng = await mountWith(s => {
+      s.overrides["GET /api/capabilities"] = () => ({ status: 500, body: { error: { code: "internal_error", message: "x" } } })
+    })
+    expect(ng.r.container.querySelector("#cred-proton")).toBeNull()
+    expect(hint(ng.r.container)).toBeNull()
+  })
+
+  test("web-credentials/AC-17: 利用不可のとき連携ボタンがなく一文が出て、未設定のとき連携ボタンも一文も出ない", async () => {
+    const off = await mountWith(cap("unavailable"))
+    await waitFor(() => expect(hint(off.r.container)).toBe("Proton Pass連携は現在利用できません"))
+    expect(off.r.container.querySelector("#cred-proton")).toBeNull()
+    cleanup()
+    const none = await mountWith(cap("disabled"))
+    expect(none.r.container.querySelector("#cred-proton")).toBeNull()
+    expect(hint(none.r.container)).toBeNull()
+  })
+
+  test("web-credentials/AC-18: 登録の応答がトークンを保持しなかったことを示すとき、画面が主画面へ進み、一覧と候補の取得の要求が送信されて通知される", async () => {
+    const { r, server, store } = await mountWith(cap("available"))
+    server.overrides["PUT /api/credentials"] = () => ({ status: 200, body: { proton: "unavailable" } })
+    await waitFor(() => expect(r.container.querySelector("#cred-proton")).not.toBeNull())
+    fireEvent.click(r.container.querySelector("#cred-proton")!)
+    fill(r.container)
+    type(r.container, "proton-token", "pat-value")
+    fireEvent.click(submitBtn(r.container))
+    await waitFor(() => expect(r.container.querySelector("#credentials")).toBeNull())
+    const urls = () => server.requests.map(q => `${q.method} ${q.url}`)
+    await waitFor(() => expect(urls()).toContain("GET /api/aliases"))
+    expect(urls()).toContain("GET /api/options")
+    expect(store.get().toasts.map(t => t.text)).toContain("Proton Pass連携は現在利用できないため、XREAの認証情報のみ登録しました")
   })
 })

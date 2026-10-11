@@ -189,3 +189,72 @@ describe("一覧の合成とProton Pass", () => {
     expect(j.proton).toMatchObject({ state: "error", error: { kind: "cli" } })
   })
 })
+
+describe("連携の利用可否", () => {
+  const caps = async (app: any) => (await app.request("/api/capabilities")).json()
+
+  test("alias-service/AC-22: 登録していない状態で200になり、読み取りサービスのURLが未設定なら未設定を返して呼び出さない", async () => {
+    const { app, seen } = await makeApp()
+    const res = await app.request("/api/capabilities")
+    expect([res.status, res.headers.get("cache-control"), await res.json()]).toEqual([200, "no-store", { proton: "available" }])
+    const none = await makeApp({ env: { PROTON_READER_URL: "" } })
+    expect(await caps(none.app)).toEqual({ proton: "disabled" })
+    expect([none.seen.reader, none.seen.health]).toEqual([[], []])
+    expect(seen.health.at(-1)?.headers.authorization).toBeUndefined()
+  })
+
+  test("alias-service/AC-23: 死活確認に200を返すと利用可能、接続できないか200以外を返すと利用不可になる", async () => {
+    expect(await caps((await makeApp()).app)).toEqual({ proton: "available" })
+    expect(await caps((await makeApp({ health: () => new Response("x", { status: 503 }) })).app)).toEqual({ proton: "unavailable" })
+    expect(
+      await caps(
+        (
+          await makeApp({
+            health: () => {
+              throw new TypeError("fetch failed")
+            },
+          })
+        ).app,
+      ),
+    ).toEqual({ proton: "unavailable" })
+  })
+
+  test("alias-service/AC-24: 利用可能は30秒、利用不可は5秒の間、再確認せずに返し、最新の確認を求めたときは再確認する", async () => {
+    vi.useFakeTimers()
+    try {
+      let status = 200
+      const { app, seen } = await makeApp({ health: () => new Response("x", { status }) })
+      const calls = () => seen.health.length
+      expect(await caps(app)).toEqual({ proton: "available" })
+      status = 503
+      vi.advanceTimersByTime(29_000)
+      expect(await caps(app)).toEqual({ proton: "available" })
+      expect(calls()).toBe(1)
+      vi.advanceTimersByTime(2_000)
+      expect(await caps(app)).toEqual({ proton: "unavailable" })
+      expect(calls()).toBe(2)
+      status = 200
+      vi.advanceTimersByTime(4_000)
+      expect(await caps(app)).toEqual({ proton: "unavailable" })
+      expect(calls()).toBe(2)
+      vi.advanceTimersByTime(2_000)
+      expect(await caps(app)).toEqual({ proton: "available" })
+      expect(calls()).toBe(3)
+      // 登録（最新の確認）は保持を無視して確認する
+      status = 503
+      const res = await app.request("/api/credentials", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(BODY) })
+      expect([res.status, await res.json()]).toEqual([200, { proton: "unavailable" }])
+      expect(calls()).toBe(4)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test("alias-service/AC-25: 読み取りサービスが応答しない状態で、1.5秒以内に利用不可で返る", async () => {
+    const { app } = await makeApp({ health: () => new Promise<Response>(() => undefined) })
+    const start = performance.now()
+    const body = await caps(app)
+    expect(body).toEqual({ proton: "unavailable" })
+    expect(performance.now() - start).toBeLessThan(1_500)
+  })
+})

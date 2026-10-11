@@ -1,0 +1,23 @@
+{
+  "name": "xrea-address-generator",
+  "main": "dist/worker/index.js",
+  "compatibility_date": "2026-08-01",
+  // プレビューURL（バージョンURL）と workers.dev を無効にする
+  "preview_urls": false,
+  "workers_dev": false,
+  "assets": {
+    "directory": "dist/web",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/healthz"],
+    "not_found_handling": "none"
+  },
+  // 自分のドメインへ配信するときは、wrangler.jsonc に routes を足す（ゾーンが同じ Cloudflare アカウントにあること）:
+  //   "routes": [{ "pattern": "app.example.com", "custom_domain": true }],
+  "vars": {
+    // ゲートウェイのHTTPSのURL（配備時に wrangler.jsonc で設定）
+    "XREA_GATEWAY_URL": "",
+    // 空なら Proton Pass 連携を使わない
+    "PROTON_READER_URL": "",
+    "CREDENTIAL_STORE": "cookie"
+  }
+}

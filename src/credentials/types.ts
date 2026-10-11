@@ -16,6 +16,8 @@ export interface CredentialStore {
     credentials: Credentials,
     opts?: { previousCookieHeader?: string | null; now?: number },
   ): Promise<string>
+  /** ログアウト。cookie を消す Set-Cookie の値を返す。SQLite方式では cookie が指す行も削除する */
+  remove(cookieHeader: string | null): Promise<string>
 }
 
 export const COOKIE_NAME = "xag_session"

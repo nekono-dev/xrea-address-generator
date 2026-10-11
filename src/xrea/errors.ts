@@ -14,12 +14,13 @@ export class XreaError extends Error {
   }
 }
 
-type Envelope<T> = { status_code: number; message?: string; result?: T }
+// 認証・入力の誤りは message ではなく error_message で返る（例: {"status_code":500,"error_target":"server_name","error_message":"invalid","error_code":100002}）
+type Envelope<T> = { status_code: number; message?: string; error_message?: string; error_target?: string; result?: T }
 
 /** status_code が 200 以外ならエラー。message が空のときは送信間隔の超過として扱う */
 export function toResult<T>(res: Envelope<T>): T | undefined {
   if (res.status_code === 200) return res.result
-  const message = (res.message ?? "").trim()
+  const message = (res.message || res.error_message || "").trim()
   if (message === "") throw new XreaError(res.status_code, "XREAへのリクエストが送信間隔の上限を超えました", "rate_limit")
   throw new XreaError(res.status_code, message, "api")
 }

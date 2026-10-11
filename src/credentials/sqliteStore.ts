@@ -1,6 +1,6 @@
 // SQL方式の保持。cookieにはセッションIDだけを入れ、認証情報は暗号化して SqlClient 経由で保存する。
-import { cookieHeader, nowSec, readCookie } from "./cookieStore"
-import { open, seal, toBase64Url } from "./seal"
+import { clearCookieHeader, cookieHeader, nowSec, readCookie } from "./cookieStore"
+import { open, seal, toBase64Url, type Keyring } from "./seal"
 import { COOKIE_NAME, LIFETIME_SEC, type CredentialStore, type Credentials } from "./types"
 
 /** SQL文とバインド変数だけで操作する最小の境界。保持方式はこのインターフェース以外のDB APIを使わない */
@@ -18,7 +18,7 @@ export const CREATE_TABLE = `CREATE TABLE IF NOT EXISTS sessions (
 
 type Payload = { c: Credentials; e: number }
 
-export function createSqlStore(key: CryptoKey, db: SqlClient, opts: { secure: boolean }): CredentialStore {
+export function createSqlStore(ring: Keyring, db: SqlClient, opts: { secure: boolean }): CredentialStore {
   let ready: Promise<void> | null = null
   const init = () => (ready ??= db.execute(CREATE_TABLE).catch(e => ((ready = null), Promise.reject(e))))
   return {
@@ -27,7 +27,7 @@ export function createSqlStore(key: CryptoKey, db: SqlClient, opts: { secure: bo
       const now = o?.now ?? nowSec()
       const exp = now + LIFETIME_SEC
       const id = toBase64Url(crypto.getRandomValues(new Uint8Array(32)))
-      const sealed = await seal(key, { c: credentials, e: exp } satisfies Payload)
+      const sealed = await seal(ring, { c: credentials, e: exp } satisfies Payload, id)
       await db.execute("DELETE FROM sessions WHERE expires_at < ?", [now])
       const prev = readCookie(o?.previousCookieHeader, COOKIE_NAME)
       if (prev) await db.execute("DELETE FROM sessions WHERE id = ?", [prev])
@@ -44,8 +44,16 @@ export function createSqlStore(key: CryptoKey, db: SqlClient, opts: { secure: bo
       )
       const row = rows[0]
       if (!row || row.expires_at <= now) return null
-      const p = await open<Payload>(key, row.sealed)
+      const p = await open<Payload>(ring, row.sealed, id)
       return p && p.e > now ? { credentials: p.c, expiresAt: p.e } : null
+    },
+    async remove(header) {
+      const id = readCookie(header, COOKIE_NAME)
+      if (id) {
+        await init()
+        await db.execute("DELETE FROM sessions WHERE id = ?", [id])
+      }
+      return clearCookieHeader(opts.secure)
     },
   }
 }

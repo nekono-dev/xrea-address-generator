@@ -4,7 +4,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { beforeAll, describe, expect, test } from "vitest"
 import { createCookieStore, readCookie } from "../../src/credentials/cookieStore"
-import { deriveKey } from "../../src/credentials/seal"
+import { deriveKey, type Keyring } from "../../src/credentials/seal"
+import { loadCredentialConfig } from "../../src/credentials/config"
 import { createNodeSqliteClient } from "../../src/credentials/sqliteClient"
 import { createSqlStore, type SqlClient } from "../../src/credentials/sqliteStore"
 import { COOKIE_NAME, LIFETIME_SEC, type CredentialStore, type Credentials } from "../../src/credentials/types"
@@ -14,8 +15,8 @@ const cred = (n: string): Credentials => ({
   protonToken: `TOKEN-${n}`,
 })
 const asRequestCookie = (setCookie: string) => setCookie.split(";")[0]!
-let key: CryptoKey
-let otherKey: CryptoKey
+let key: Keyring
+let otherKey: Keyring
 beforeAll(async () => {
   key = await deriveKey("a".repeat(32))
   otherKey = await deriveKey("b".repeat(32))
@@ -118,6 +119,25 @@ describe.each([
     expect(left.filter(r => r.expires_at < NOW + LIFETIME_SEC + 100)).toHaveLength(0)
   })
 
+  test("credential-session/AC-26: ログアウトで行が削除され、ログアウト前のcookieの値を再送しても未登録になる", async () => {
+    fresh()
+    const cookie = asRequestCookie(await store.save(cred("1"), { now: NOW }))
+    const cleared = await store.remove(cookie)
+    expect(cleared).toContain("Max-Age=0")
+    expect(await rows()).toHaveLength(0)
+    expect(await store.load(cookie, NOW)).toBeNull()
+    await expect(store.remove(null)).resolves.toContain("Max-Age=0") // 未登録でも成功する
+  })
+
+  test("credential-session/AC-24: 暗号文を別のIDの行へ複製すると複製先では未登録になり、元のIDでは取り出せる", async () => {
+    fresh()
+    const cookie = asRequestCookie(await store.save(cred("1"), { now: NOW }))
+    const [row] = await rows()
+    await db.execute("INSERT INTO sessions (id, sealed, expires_at) VALUES (?, ?, ?)", ["copied-id", row!.sealed, row!.expires_at])
+    expect(await store.load(`${COOKIE_NAME}=copied-id`, NOW)).toBeNull()
+    expect((await store.load(cookie, NOW))?.credentials).toEqual(cred("1"))
+  })
+
   test("credential-session/AC-5: Secure属性は設定を外したときだけ付かない", async () => {
     fresh()
     const off = await createSqlStore(key, db, { secure: false }).save(cred("1"))
@@ -146,6 +166,36 @@ function fakeClient(): SqlClient {
     },
   }
 }
+
+describe("秘密値の更新", () => {
+  const OLD = "a".repeat(32)
+  const NEW = "n".repeat(32)
+  const store = (ring: Keyring) => createCookieStore(ring, { secure: true })
+
+  test("credential-session/AC-21: 直前の秘密値を指定すると入れ替え前のcookieが取り出され、その後の登録は新しい鍵で暗号化される", async () => {
+    const before = asRequestCookie(await store(await deriveKey(OLD)).save(cred("1"), { now: NOW }))
+    const rotated = store(await deriveKey(NEW, OLD))
+    expect((await rotated.load(before, NOW))?.credentials).toEqual(cred("1"))
+    const after = asRequestCookie(await rotated.save(cred("2"), { now: NOW }))
+    expect((await store(await deriveKey(NEW)).load(after, NOW))?.credentials).toEqual(cred("2"))
+    expect(await store(await deriveKey(OLD)).load(after, NOW)).toBeNull()
+  })
+
+  test("credential-session/AC-22: 直前の秘密値を指定しないと入れ替え前のcookieは未登録になる", async () => {
+    const before = asRequestCookie(await store(await deriveKey(OLD)).save(cred("1"), { now: NOW }))
+    expect(await store(await deriveKey(NEW)).load(before, NOW)).toBeNull()
+  })
+
+  test("credential-session/AC-23: 直前の秘密値が31文字なら失敗し、現行と同じ値は1つの鍵として扱われる", async () => {
+    expect(() => loadCredentialConfig({ COOKIE_SECRET: NEW, COOKIE_SECRET_PREVIOUS: "a".repeat(31) })).toThrow(/COOKIE_SECRET_PREVIOUS/)
+    expect(loadCredentialConfig({ COOKIE_SECRET: NEW, COOKIE_SECRET_PREVIOUS: OLD }).previousSecret).toBe(OLD)
+    expect(loadCredentialConfig({ COOKIE_SECRET: NEW, COOKIE_SECRET_PREVIOUS: "" }).previousSecret).toBeUndefined()
+    const same = await deriveKey(OLD, OLD)
+    expect(same.byKid.size).toBe(1)
+    const c = asRequestCookie(await store(same).save(cred("1"), { now: NOW }))
+    expect((await store(await deriveKey(OLD)).load(c, NOW))?.credentials).toEqual(cred("1"))
+  })
+})
 
 describe("sqlite3コマンドでの参照", () => {
   const has = spawnSync("sqlite3", ["-version"]).status === 0

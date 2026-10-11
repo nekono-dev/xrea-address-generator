@@ -2,10 +2,14 @@
 import { Hono, type MiddlewareHandler } from "hono"
 import { AppError, STATUS, errorBody } from "../shared/errors"
 import type { Logger } from "../shared/logger"
-import { LIMITS, type CredentialStore, type Credentials, type Registration, type XreaCredentials } from "./types"
+import { nowSec } from "./cookieStore"
+import { LIFETIME_SEC, LIMITS, type CredentialStore, type Credentials, type Registration, type XreaCredentials } from "./types"
 
 /** XREAの一覧を1回取得できれば true */
 export type Verify = (x: XreaCredentials) => Promise<boolean>
+
+/** 連携の利用可否を最新の状態で確認する。"available" のときだけトークンを保持する */
+export type ProtonCheck = () => Promise<"disabled" | "available" | "unavailable">
 
 export type CredentialEnv = { Variables: { registration: Registration } }
 
@@ -34,7 +38,7 @@ export function parseCredentials(body: unknown): Credentials {
 }
 
 /** ログと例外の応答を含む単独のルート。他のルートと同居させるときは registerCredentialRoutes を使う */
-export function credentialRoutes(deps: { store: CredentialStore; verify: Verify; log: Logger }) {
+export function credentialRoutes(deps: { store: CredentialStore; verify: Verify; protonCheck: ProtonCheck; log: Logger }) {
   const app = new Hono<CredentialEnv>()
   const { log } = deps
 
@@ -55,9 +59,9 @@ export function credentialRoutes(deps: { store: CredentialStore; verify: Verify;
   return app
 }
 
-/** PUT・GET /api/credentials を登録する */
-export function registerCredentialRoutes<E extends CredentialEnv>(app: Hono<E>, deps: { store: CredentialStore; verify: Verify }) {
-  const { store, verify } = deps
+/** PUT・GET・DELETE /api/credentials を登録する */
+export function registerCredentialRoutes<E extends CredentialEnv>(app: Hono<E>, deps: { store: CredentialStore; verify: Verify; protonCheck: ProtonCheck }) {
+  const { store, verify, protonCheck } = deps
 
   app.put("/api/credentials", async c => {
     if (!(c.req.header("content-type") ?? "").toLowerCase().startsWith("application/json"))
@@ -76,19 +80,39 @@ export function registerCredentialRoutes<E extends CredentialEnv>(app: Hono<E>, 
       throw new AppError("upstream_error", "XREAに接続できませんでした")
     }
     if (!ok) throw new AppError("invalid_credentials", "XREAの認証情報を確認してください")
+    // トークンがあるときだけ利用可否を最新の状態で確認し、利用可能でなければトークンを保持しない
+    let proton: "disabled" | "available" | "unavailable" = "available"
+    if (credentials.protonToken !== null) {
+      try {
+        proton = await protonCheck()
+      } catch {
+        proton = "unavailable"
+      }
+      if (proton !== "available") credentials.protonToken = null
+    }
     const cookie = await store.save(credentials, { previousCookieHeader: c.req.header("cookie") ?? null })
     c.header("Set-Cookie", cookie)
+    return proton === "available" ? c.body(null, 204) : c.json({ proton }, 200)
+  })
+
+  // ログアウト。未登録でも成功する。SameSite=Strict により、他サイトからの送信には cookie が付かない
+  app.delete("/api/credentials", async c => {
+    c.header("Set-Cookie", await store.remove(c.req.header("cookie") ?? null))
     return c.body(null, 204)
   })
 
   app.get("/api/credentials", async c => {
-    const reg = await store.load(c.req.header("cookie") ?? null)
+    const cookie = c.req.header("cookie") ?? null
+    const reg = await store.load(cookie)
     c.header("Cache-Control", "no-store")
     if (!reg) return c.json({ registered: false })
+    // ダッシュボードを開いたときの問い合わせで、有効期間を7日へ延長する（同じ認証情報で発行し直す）
+    const now = nowSec()
+    c.header("Set-Cookie", await store.save(reg.credentials, { previousCookieHeader: cookie, now }))
     return c.json({
       registered: true,
       proton: reg.credentials.protonToken !== null,
-      expiresAt: new Date(reg.expiresAt * 1000).toISOString(),
+      expiresAt: new Date((now + LIFETIME_SEC) * 1000).toISOString(),
     })
   })
 }

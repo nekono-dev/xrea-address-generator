@@ -23,6 +23,10 @@ export async function mockApi(page: Page, init: { aliases?: Alias[]; proton?: Pr
     proton: init.proton ?? ready(),
     protonSequence: init.protonSequence ?? [],
     registered: init.registered ?? true,
+    /** 連携の利用可否 */
+    capability: "available" as "disabled" | "available" | "unavailable",
+    /** 登録の応答で返す proton。null なら 204 */
+    putProton: null as null | "disabled" | "unavailable",
     servers: ["s1.xrea.com", "s10.xrea.com", "s100.xrea.com", "s2.xrea.com"],
     /** 登録の要求が返す失敗。null なら成功（204） */
     putFailure: null as null | { status: number; code: string; message: string },
@@ -43,16 +47,22 @@ export async function mockApi(page: Page, init: { aliases?: Alias[]; proton?: Pr
     const json = (status: number, b?: unknown) => route.fulfill({ status, contentType: "application/json", body: b === undefined ? "" : JSON.stringify(b) })
     const key = `${req.method()} ${url.pathname.endsWith("/forward") ? "/api/aliases/:address/forward" : url.pathname.startsWith("/api/aliases/") ? "/api/aliases/:address" : url.pathname}`
     // 保護対象のAPIは、未登録（期限切れを含む）なら登録を求める
-    if (!state.registered && !url.pathname.startsWith("/api/credentials") && url.pathname !== "/api/servers")
+    if (!state.registered && !url.pathname.startsWith("/api/credentials") && url.pathname !== "/api/servers" && url.pathname !== "/api/capabilities")
       return json(401, { error: { code: "credentials_required", message: "認証情報を登録してください" } })
     switch (key) {
+      case "GET /api/capabilities":
+        return json(200, { proton: state.capability })
       case "GET /api/servers":
         return json(200, { servers: state.servers })
       case "GET /api/credentials":
         return json(200, state.registered ? { registered: true, proton: true, expiresAt: "2026-10-18T00:00:00.000Z" } : { registered: false })
+      case "DELETE /api/credentials":
+        state.registered = false
+        return route.fulfill({ status: 204, body: "" })
       case "PUT /api/credentials":
         if (state.putFailure) return json(state.putFailure.status, { error: { code: state.putFailure.code, message: state.putFailure.message } })
         state.registered = true
+        if (state.putProton) return json(200, { proton: state.putProton })
         return route.fulfill({ status: 204, body: "" })
       case "GET /api/aliases":
         return json(200, { aliases: state.aliases, proton: state.proton })

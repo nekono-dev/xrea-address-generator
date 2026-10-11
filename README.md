@@ -85,7 +85,7 @@ docker compose -f compose.yaml -f compose.lan.yaml up -d
 
 ## クラウドに載せる
 
-`app` を Cloudflare Workers の無料枠へ、`xrea-gateway`（と任意で `proton-reader`）を任意のコンテナ基盤へ配備します。手順は [docs/cloud-deploy.md](docs/cloud-deploy.md) を参照してください。配備後の疎通確認は `npx tsx scripts/cloud/check.ts probe` で行えます。
+`app` を Cloudflare Workers の無料枠へ、`xrea-gateway`（と任意で `proton-reader`）を任意のコンテナ基盤へ配備します。事前準備のあと、`npm run deploy:cloud` で構成例のすべてを一括で配備できます（手動の手順もあります）。撤去は `npm run destroy:cloud` です。詳細は [docs/cloud-deploy.md](docs/cloud-deploy.md) を参照してください。配備後の疎通確認は `npx tsx scripts/cloud/check.ts probe` で行えます。配備後の運用（保持方式、秘密値の更新、失効）は [docs/cloud-operations.md](docs/cloud-operations.md) を参照してください。
 
 ## 環境変数
 
@@ -113,24 +113,44 @@ Docker Compose 用の変数（`.env`）は [.env.example](.env.example) を参�
 
 ## 開発
 
+### 1. 準備する
+
+Node.js 22 以上が必要です。依存パッケージを入れます。
+
 ```sh
 npm ci
+```
+
+### 2. ローカルで起動して画面を確認する
+
+```sh
+npm run dev
+```
+
+ゲートウェイ（8081）・アプリ（3000）・読み取りサービス（8082）・Vite（5173）がまとまって起動します。ブラウザで `http://<ホストのアドレス>:5173` を開いてください。Ctrl+C で全て終了します。
+
+- `/api` は Vite からアプリへ転送されます。Vite だけが `0.0.0.0` で待ち受け、ほかは固定の開発用トークンを使うため `127.0.0.1` に限ります。
+- 秘密値は開発専用の固定値です。`INTERNAL_TOKEN`・`COOKIE_SECRET` で上書きできます。
+- 読み取りサービスが使う公式 CLI（`pass-cli`）が PATH に無ければ、初回に取得して `.dev/bin` に置きます（ハッシュを検証）。
+- Proton Pass 連携を使わないときは `PROTON_READER_URL= npm run dev` とします（読み取りサービスの起動と `pass-cli` の取得を省きます）。
+
+### 3. 変更を検査する
+
+```sh
 npm run typecheck        # 型チェック
 npm test                 # 単体テスト
 npx playwright test      # 画面のブラウザテスト（ヘッドレス）
-npm run build            # dist/app・dist/gateway・dist/reader・dist/worker・dist/web を生成
 npm run lint:spec        # 仕様書の検査
-npx tsx scripts/icons.ts # アイコンの原画（web/icon.svg）から PWA のアイコンを書き出す
 ```
 
-開発時は、ゲートウェイ・アプリ・Vite を並べて起動します。`/api` は Vite からアプリへ転送されます。
+### 4. ビルドする
 
 ```sh
-export INTERNAL_TOKEN=$(openssl rand -hex 32) COOKIE_SECRET=$(openssl rand -hex 32)
-PORT=8081 npx tsx src/gateway/main.ts &
-XREA_GATEWAY_URL=http://127.0.0.1:8081 COOKIE_SECURE=0 BIND_ADDRESS=127.0.0.1 npx tsx src/app/node.ts &
-npx vite --config vite.config.ts
+npm run build            # dist/app・dist/gateway・dist/reader・dist/worker・dist/web を生成
+npx tsx scripts/icons.ts # アイコンの原画（web/icon.svg）から PWA のアイコンを書き出す（アイコンを変えたときだけ）
 ```
+
+### 5. 実機で確認する（任意）
 
 実機を使うテストは、変数を指定したときだけ実行されます（`.env` の値を環境変数として読み込んでから実行してください）。XREA は同じ操作の連続した要求を1秒に1回までしか受け付けないため、XREA を使うテストは1ファイルずつ実行してください。
 

@@ -24,6 +24,10 @@ describe("エラー応答の変換", () => {
     expect(() => toResult({ status_code: 500 })).toThrow(expect.objectContaining({ kind: "rate_limit" }))
   })
 
+  test("認証の誤りは error_message で返り、送信間隔の超過ではなく api の例外になる", () => {
+    expect(() => toResult({ status_code: 500, error_target: "server_name", error_message: "invalid" })).toThrow(expect.objectContaining({ kind: "api", message: "invalid" }))
+  })
+
   test("ネットワーク障害は kind=network、解釈できない応答は kind=api の例外になる", async () => {
     const down = new XreaClient({ account: "a", serverName: "s", apiSecretKey: "k" }, { fetch: async () => Promise.reject(new TypeError("fetch failed")), queue: new EndpointQueue(0) })
     await expect(down.mailList()).rejects.toMatchObject({ kind: "network" })

@@ -4,3 +4,6 @@ dist/
 .proton-session/
 test-results/
 playwright-report/
+.gcloud
+.docker/
+wrangler.jsonc

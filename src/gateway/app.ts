@@ -8,6 +8,10 @@ import type { DomainCheck } from "./domainCheck"
 import type { Registry } from "./registry"
 import * as svc from "./service"
 
+// Workers からの呼び出しでは、Cloudflare が 5xx の応答を本文ごと "error code: 502" に置き換える。
+// 本文の code を届けるため、ゲートウェイは XREA・ネットワーク由来の異常を 5xx ではなく 4xx で返す
+const WIRE_STATUS: Partial<Record<AppError["code"], 424 | 429>> = { upstream_error: 424, rate_limited: 429 }
+
 function toAppError(e: unknown): AppError | null {
   if (e instanceof AppError) return e
   if (e instanceof XreaError) {
@@ -31,7 +35,7 @@ export function createGatewayApp(opts: { registry: Registry; internalToken: stri
     const appErr = toAppError(e)
     if (appErr) {
       log.warn({ route: `${c.req.method} ${c.req.routePath}`, code: appErr.code })
-      return c.json(errorBody(appErr.code, appErr.message, appErr.kind), STATUS[appErr.code])
+      return c.json(errorBody(appErr.code, appErr.message, appErr.kind), WIRE_STATUS[appErr.code] ?? STATUS[appErr.code])
     }
     // 例外の詳細に認証情報が含まれ得るため、名前だけを記録する
     log.error({ route: `${c.req.method} ${c.req.routePath}`, error: (e as Error).name })

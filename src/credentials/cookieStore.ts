@@ -1,5 +1,5 @@
 // cookie方式の保持と、Set-Cookie の組み立て。Node.js固有のAPIは使わない。
-import { open, seal } from "./seal"
+import { open, seal, type Keyring } from "./seal"
 import {
   COOKIE_NAME,
   LIFETIME_SEC,
@@ -24,17 +24,26 @@ export function cookieHeader(value: string, secure: boolean): string {
   return `${COOKIE_NAME}=${value}; Max-Age=${LIFETIME_SEC}; Path=/; HttpOnly; SameSite=Strict${secure ? "; Secure" : ""}`
 }
 
-export function createCookieStore(key: CryptoKey, opts: { secure: boolean }): CredentialStore {
+// ログアウト: 値を空にして有効期間を0にする
+export function clearCookieHeader(secure: boolean): string {
+  return `${COOKIE_NAME}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict${secure ? "; Secure" : ""}`
+}
+
+export function createCookieStore(ring: Keyring, opts: { secure: boolean }): CredentialStore {
   return {
     async save(credentials: Credentials, o) {
       const exp = (o?.now ?? nowSec()) + LIFETIME_SEC
-      const value = await seal(key, { c: credentials, e: exp })
+      const value = await seal(ring, { c: credentials, e: exp })
       return cookieHeader(value, opts.secure)
     },
     async load(header, now = nowSec()) {
       const raw = readCookie(header, COOKIE_NAME)
-      const p = raw ? await open<{ c: Credentials; e: number }>(key, raw) : null
+      const p = raw ? await open<{ c: Credentials; e: number }>(ring, raw) : null
       return p && p.e > now ? { credentials: p.c, expiresAt: p.e } : null
+    },
+    // サーバ側に何も持たないため、cookie を消すだけ（複製された cookie は期限まで有効）
+    async remove() {
+      return clearCookieHeader(opts.secure)
     },
   }
 }

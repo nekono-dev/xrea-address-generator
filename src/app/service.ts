@@ -15,7 +15,14 @@ const unreachable: EntriesResponse = {
   entries: {},
 }
 
+export type ProtonCapability = "disabled" | "available" | "unavailable"
+
+// 利用可否の結果の保持時間（ミリ秒）。外部への確認の頻度を抑える目的で、正しさには影響しない
+export const CAPABILITY_TTL_MS = { available: 30_000, unavailable: 5_000 } as const
+
 export class AppService {
+  private capability: { value: "available" | "unavailable"; expiresAt: number } | null = null
+
   constructor(
     private gateway: GatewayClient,
     private reader: ReaderClient | null,
@@ -30,6 +37,22 @@ export class AppService {
       if (e instanceof AppError && e.code === "upstream_error" && e.kind === "api") return false
       throw e
     }
+  }
+
+  /** 連携の利用可否。未設定なら通信しない。fresh のときは保持を無視して確認し、保持を更新する */
+  protonCapability = async (opts: { fresh?: boolean } = {}): Promise<ProtonCapability> => {
+    if (!this.reader) return "disabled"
+    const now = Date.now()
+    if (!opts.fresh && this.capability && now < this.capability.expiresAt) return this.capability.value
+    let ok = false
+    try {
+      ok = await this.reader.health()
+    } catch {
+      ok = false
+    }
+    const value = ok ? "available" : "unavailable"
+    this.capability = { value, expiresAt: Date.now() + CAPABILITY_TTL_MS[value] }
+    return value
   }
 
   // 読み取りサービスが未設定、またはトークンが無ければ呼び出さない。失敗は照合の状態に写す

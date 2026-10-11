@@ -51,16 +51,16 @@ describe("認証と死活確認", () => {
     expect(() => loadGatewayConfig({ INTERNAL_TOKEN: TOKEN, PORT: "0" })).toThrow(ConfigError)
   })
 
-  test("XREAのエラーは、メッセージ付きなら 502、送信間隔の超過なら 503 になる", async () => {
+  test("XREAのエラーは、メッセージ付きなら 424、送信間隔の超過なら 429 になる（5xx は Cloudflare に本文を置き換えられるため使わない）", async () => {
     const xrea = new FakeXrea(sampleMails())
     const { app } = setup(xrea)
     xrea.mailList = async () => Promise.reject(new XreaError(500, "認証情報が正しくありません。", "api"))
     let res = await app.request("/v1/aliases", { headers: H })
-    expect(res.status).toBe(502)
+    expect(res.status).toBe(424)
     expect(await res.json()).toEqual({ error: { code: "upstream_error", message: "認証情報が正しくありません。", kind: "api" } })
     xrea.mailList = async () => Promise.reject(new XreaError(500, "", "rate_limit"))
     res = await app.request("/v1/options", { headers: H })
-    expect(res.status).toBe(503)
+    expect(res.status).toBe(429)
     expect((await res.json()).error.code).toBe("rate_limited")
   })
 

@@ -24,8 +24,12 @@ export function fakeServer(init: { aliases?: Alias[]; proton?: ProtonStatus; dom
     const key = `${method} ${url.endsWith("/forward") ? "/api/aliases/:address/forward" : url.replace(/\/api\/aliases\/.+$/, "/api/aliases/:address")}`
     if (overrides[key]) return overrides[key]!({ method, url, body })
     switch (key) {
+      case "GET /api/capabilities":
+        return { status: 200, body: { proton: "available" } }
       case "GET /api/servers":
         return { status: 200, body: { servers: ["s1.xrea.com", "s10.xrea.com", "s100.xrea.com", "s2.xrea.com"] } }
+      case "DELETE /api/credentials":
+        return { status: 204, body: undefined }
       case "GET /api/credentials":
         return { status: 200, body: { registered: true, proton: true, expiresAt: "2026-10-18T00:00:00.000Z" } }
       case "GET /api/aliases":

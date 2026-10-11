@@ -7,7 +7,7 @@
 | `src/app/api.ts`            | APIのルーティングとエラー応答（実行環境に依存しない） |
 | `src/app/service.ts`        | 一覧の合成、中継、照合状態の組み立て                  |
 | `src/app/gatewayClient.ts`  | ゲートウェイへの要求                                  |
-| `src/app/readerClient.ts`   | 読み取りサービスへの要求                              |
+| `src/app/readerClient.ts`   | 読み取りサービスへの要求と死活確認                    |
 | `src/app/config.ts`         | 環境変数の読み込みと検証                              |
 | `src/app/servers.ts`        | サーバ名の一覧の読み込みと検証                        |
 | `config/xrea-servers.json`  | 組み込みの既定のサーバ名の一覧（設定ファイルの原本）  |
@@ -22,7 +22,7 @@
 
 ## 2. 設計項目
 
-### D-1: HTTP API (FR-4, FR-5, FR-11)
+### D-1: HTTP API (FR-4, FR-5)
 
 | メソッドとパス                       | 要求                            | 成功応答                        |
 | ------------------------------------ | ------------------------------- | ------------------------------- |
@@ -36,6 +36,7 @@
 | POST /api/proton/refresh             | なし                            | 202                             |
 | PUT・GET /api/credentials            | 認証情報の登録と問い合わせ      | 認証情報の保持の仕様に従う      |
 | GET /api/servers                     | なし（登録前でも呼べる）        | 200 { servers }                 |
+| GET /api/capabilities                | なし（登録前でも呼べる）        | 200 { proton }                  |
 | GET /healthz                         | なし                            | 200 { ok: true }                |
 
 ```ts
@@ -236,7 +237,7 @@ export default {
 | 設定             | 環境の束縛（変数と秘密）を config.ts の読み込み関数へ渡す。形式は process.env と同じ文字列の辞書   |
 | 保持方式         | cookie のみ（SQLite方式の設定は起動時に拒否）                                                      |
 
-### D-8: サーバ名の一覧 (FR-12)
+### D-8: サーバ名の一覧 (FR-11)
 
 ```ts
 // config/xrea-servers.json: { "servers": ["s1.xrea.com", ...] }。XREAのログイン画面のサーバの選択肢と同じ内容
@@ -255,6 +256,33 @@ export function loadServers(
 | Workers | ファイルを読めないため、ビルド時に埋め込んだ一覧だけを使う                                     |
 | Node.js | XREA_SERVERS_FILE の指定時、起動のたびにファイルを読む（イメージの再作成なしで差し替えられる） |
 
+### D-9: Proton Pass連携の利用可否 (FR-12, NFR-5)
+
+```ts
+export type ProtonCapability = "disabled" | "available" | "unavailable"
+// disabled: 読み取りサービスのURLが未設定。available: 死活確認が成功。unavailable: 設定はあるが確認に失敗
+
+// ReaderClient: GET /health を、共有シークレットなしで1秒（AbortSignal.timeout）で打ち切って呼ぶ。200 のとき true
+health(): Promise<boolean>
+
+// AppService
+protonCapability(opts?: { fresh?: boolean }): Promise<ProtonCapability>
+// reader が null なら "disabled"（通信しない）。fresh でなければ有効期限内の結果を返す
+// 結果の保持: available は30秒、unavailable は5秒。fresh のときは確認して保持を更新する
+// health の例外は unavailable にする
+
+api.get("/api/capabilities", async c => {
+  c.header("Cache-Control", "no-store")
+  return c.json({ proton: await service.protonCapability() })
+}) // requireCredentials の前に登録する
+```
+
+| 項目     | 内容                                                                                                     |
+| -------- | -------------------------------------------------------------------------------------------------------- |
+| 公開項目 | 3つの値のみ。読み取りサービスのURLと失敗の詳細は返さない                                                 |
+| 保持     | 実行環境のメモリのみ（Workersでは isolate ごと）。外部への確認の頻度を抑える目的で、正しさには影響しない |
+| 登録時   | 認証情報の登録のルートへ、最新の確認の関数 `() => service.protonCapability({ fresh: true })` を渡す      |
+
 ## 3. エラー処理
 
 | 事象                                 | 処理                                                               |
@@ -264,4 +292,5 @@ export function loadServers(
 | ゲートウェイへ接続できない・超過     | 502 upstream_error を返す                                          |
 | ゲートウェイの共有シークレットの拒否 | 502 upstream_error を返し、利用者の認証情報の問題と区別する        |
 | 読み取りサービスの失敗               | 一覧は返し、照合の状態を error にする                              |
+| 死活確認の失敗・打ち切り             | 利用可否を unavailable にして200で返す                             |
 | 想定外の例外                         | 500 を返し、詳細をログにのみ記録する                               |

@@ -89,7 +89,7 @@ test.describe("一覧と行の操作", () => {
 
     // 発行: Tab で（ヘッダの認証情報ボタンを経て）名前欄へ移動し、入力して Enter
     await page.keyboard.press("Tab")
-    await expect(page.locator("#cred-open")).toBeFocused()
+    await expect(page.locator("#cred-logout")).toBeFocused()
     await page.keyboard.press("Tab")
     await expect(page.locator("#name")).toBeFocused()
     await page.keyboard.type("kbd-only")

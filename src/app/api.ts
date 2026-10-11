@@ -47,7 +47,11 @@ export function createApi(deps: { service: AppService; store: CredentialStore; l
   api.get("/healthz", c => c.json({ ok: true }))
 
   api.get("/api/servers", c => c.json({ servers })) // 登録の前にも呼べる
-  registerCredentialRoutes(api, { store, verify: service.verify }) // /api/credentials
+  api.get("/api/capabilities", async c => {
+    c.header("Cache-Control", "no-store")
+    return c.json({ proton: await service.protonCapability() })
+  }) // 登録の前にも呼べる
+  registerCredentialRoutes(api, { store, verify: service.verify, protonCheck: () => service.protonCapability({ fresh: true }) }) // /api/credentials
   api.use("/api/*", requireCredentials(store)) // 以降の /api/* は登録済みの利用者だけ
   const creds = (c: Context<CredentialEnv>) => c.get("registration").credentials
 
@@ -96,7 +100,7 @@ export function createApi(deps: { service: AppService; store: CredentialStore; l
 
 /** 設定から保持方式・クライアント・APIを組み立てる。SQL方式のときは db を渡す */
 export async function buildApi(config: AppConfig, opts: { db?: SqlClient; fetch?: typeof fetch; log?: Logger } = {}) {
-  const key = await deriveKey(config.credentials.secret)
+  const key = await deriveKey(config.credentials.secret, config.credentials.previousSecret)
   const secure = config.credentials.secure
   let store: CredentialStore
   if (config.credentials.store === "sqlite") {

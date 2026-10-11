@@ -2,7 +2,7 @@
 import type { ComponentChildren } from "preact"
 import { useEffect, useRef, useState } from "preact/hooks"
 import { api, onCredentialsRequired } from "./api"
-import { credentialsApi } from "./credentials"
+import { credentialsApi, type ProtonCapability } from "./credentials"
 import { loadPrefs } from "./prefs"
 import { OfflineBanner } from "./pwa"
 import { AliasList } from "./components/AliasList"
@@ -115,7 +115,6 @@ function Main({ store, pollMs, header }: { store: Store; pollMs: number; header:
 
 export function App({ store = defaultStore, pollMs = POLL_MS }: { store?: Store; pollMs?: number }) {
   const state = useStore(s => s.credential, store)
-  const [editing, setEditing] = useState(false)
   const [statusError, setStatusError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -131,23 +130,35 @@ export function App({ store = defaultStore, pollMs = POLL_MS }: { store?: Store;
     return onCredentialsRequired(() => store.set(s => (s.credential === "registered" ? { credential: "expired" } : {})))
   }, [])
 
-  function registered() {
-    // 前の認証情報で取得した内容を引き継がない
-    store.set({ aliases: [], listLoaded: false, listError: null, options: { domains: [], forwardTargets: [] }, optionsError: null, proton: null, credential: "registered" })
-    setEditing(false)
+  // 前の認証情報で取得した内容を引き継がない
+  const clearLoaded = { aliases: [], listLoaded: false, listError: null, options: { domains: [], forwardTargets: [] }, optionsError: null, proton: null }
+
+  function registered(r?: { proton?: ProtonCapability }) {
+    store.set({ ...clearLoaded, credential: "registered" })
     setStatusError(null)
+    // 連携が利用できずトークンを保持しなかったときは、主画面へ進んだうえで通知する
+    if (r?.proton) store.toast("Proton Pass連携は現在利用できないため、XREAの認証情報のみ登録しました")
+  }
+
+  async function logout() {
+    try {
+      await credentialsApi.logout()
+    } catch {
+      store.toast("ログアウトに失敗しました") // 主画面と登録状態を維持する
+      return
+    }
+    store.set({ ...clearLoaded, credential: "missing" })
   }
 
   if (state === "unknown") return null
-  if (state !== "registered" || editing) {
+  if (state !== "registered") {
     return (
       <CredentialsPanel
-        notice={state === "expired" ? "認証情報の有効期限が切れました。もう一度登録してください" : null}
+        notice={state === "expired" ? "認証情報の有効期限が切れました。もう一度ログインしてください" : null}
         initialError={statusError}
         onRegistered={registered}
-        onCancel={state === "registered" ? () => setEditing(false) : undefined}
       />
     )
   }
-  return <Main store={store} pollMs={pollMs} header={<CredentialsButton onClick={() => setEditing(true)} />} />
+  return <Main store={store} pollMs={pollMs} header={<CredentialsButton onClick={() => void logout()} />} />
 }

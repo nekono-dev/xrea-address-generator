@@ -1,7 +1,8 @@
-// 認証情報の登録画面。ダイアログではなく、画面内のパネルとして表示する。
+// XREAへのログイン画面（認証情報の登録）。ダイアログではなく、画面内のパネルとして表示する。
 import { useEffect, useState } from "preact/hooks"
 import { ApiFailure } from "../api"
-import { canRegister, credentialsApi } from "../credentials"
+import { canRegister, credentialsApi, type ProtonCapability } from "../credentials"
+import { loadServerName, saveServerName } from "../prefs"
 import { Combobox } from "./Combobox"
 
 const isImeEnter = (e: KeyboardEvent) => e.isComposing || e.keyCode === 229
@@ -11,19 +12,19 @@ export function CredentialsPanel({
   notice,
   initialError,
   onRegistered,
-  onCancel,
 }: {
   notice?: string | null
   initialError?: string | null
-  onRegistered: () => void
-  onCancel?: () => void
+  onRegistered: (r?: { proton?: ProtonCapability }) => void
 }) {
   // 入力した値はこのコンポーネントの状態にだけ保持する（ブラウザの保存領域とURLには書かない）
-  const [serverName, setServerName] = useState("")
+  // ただしサーバ名は秘匿情報ではないため、localStorageへ保存して次回の初期値にする
+  const [serverName, setServerName] = useState(() => loadServerName())
   const [account, setAccount] = useState("")
   const [key, setKey] = useState("")
   const [token, setToken] = useState("")
   const [proton, setProton] = useState(false)
+  const [capability, setCapability] = useState<ProtonCapability>("disabled")
   const [servers, setServers] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(initialError ?? null)
@@ -38,16 +39,25 @@ export function CredentialsPanel({
       .catch(() => undefined)
   }, [])
 
+  // 連携の利用可否は表示時に1回取得する。失敗したときは連携なし（disabled）として扱う
+  useEffect(() => {
+    credentialsApi
+      .capabilities()
+      .then(r => setCapability(r.proton))
+      .catch(() => undefined)
+  }, [])
+
   async function submit(): Promise<void> {
     if (!canSubmit) return
     setBusy(true)
     setError(null)
     try {
-      await credentialsApi.register({
+      const res = await credentialsApi.register({
         xrea: { account: account.trim(), serverName: serverName.trim(), apiSecretKey: key },
         ...(token.trim() ? { protonToken: token.trim() } : {}),
       })
-      onRegistered() // 登録画面を閉じ、一覧と候補を取得する
+      saveServerName(serverName.trim())
+      onRegistered(res) // 登録画面を閉じ、一覧と候補を取得する。トークンを保持しなかったときは応答を渡す
     } catch (e) {
       const f = e as ApiFailure
       setError(f.code === "invalid_credentials" ? INVALID_MESSAGE : f.message) // 入力値は消さない
@@ -64,8 +74,9 @@ export function CredentialsPanel({
 
   return (
     <main class="wrap">
+      <h1 class="cred-app">ALIAS GENERATOR</h1>
       <section class="cred cred-head" id="credentials" aria-labelledby="cred-title">
-        <h2 id="cred-title">XREAの認証情報を登録</h2>
+        <h2 id="cred-title">XREAへログイン</h2>
         {notice && (
           <p class="cred-notice" role="status">
             {notice}
@@ -106,28 +117,26 @@ export function CredentialsPanel({
             <input class="fld" name="password" type="password" autoComplete="current-password" value={key} onInput={e => setKey((e.target as HTMLInputElement).value)} />
           </label>
           <button type="submit" class="btn" id="cred-submit" disabled={!canSubmit}>
-            登録
+            ログイン
           </button>
         </form>
         {proton ? (
           <label class="cred-field">
             <span>Proton Pass アクセストークン（任意）</span>
-            <input class="fld" name="proton-token" type="password" autoComplete="off" value={token} onInput={e => setToken((e.target as HTMLInputElement).value)} onKeyDown={enterToSubmit} />
+            {/* type="password"だとProton Passが新規パスワード作成フォームとみなすため、type="search"にして文字は伏せ字にする */}
+            <input class="fld secret" name="proton-token" type="search" autoComplete="off" spellcheck={false} value={token} onInput={e => setToken((e.target as HTMLInputElement).value)} onKeyDown={enterToSubmit} />
           </label>
-        ) : (
+        ) : capability === "available" ? (
           <button type="button" class="ghost cred-proton" id="cred-proton" onClick={() => setProton(true)}>
             Proton Pass連携を使う
           </button>
-        )}
+        ) : capability === "unavailable" ? (
+          <p class="cred-hint">Proton Pass連携は現在利用できません</p>
+        ) : null}
         {error && (
           <p class="cred-error" role="alert">
             {error}
           </p>
-        )}
-        {onCancel && (
-          <button type="button" class="ghost" id="cred-cancel" onClick={onCancel}>
-            取り消し
-          </button>
         )}
       </section>
     </main>

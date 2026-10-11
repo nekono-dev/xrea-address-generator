@@ -30,8 +30,11 @@ export async function probe(
   const url = (base: string, p: string) => `${base.replace(/\/+$/, "")}${p}`
   const run = async (name: string, expected: (r: Response) => boolean | Promise<boolean>, u: string, init: RequestInit = {}): Promise<Probe> => {
     try {
-      const r = await f(u, { ...init, signal })
-      return { name, ok: await expected(r), detail: `HTTP ${r.status}` }
+      // 転送（Cloudflare Access のログインなど）を辿ると、ログイン画面の 200 を成功と誤判定するため、辿らない
+      const r = await f(u, { ...init, signal, redirect: "manual" })
+      const redirected = r.status >= 300 && r.status < 400
+      const ok = !redirected && (await expected(r))
+      return { name, ok, detail: redirected ? `HTTP ${r.status}（転送されました。Cloudflare Access などの認証が前段にあります）` : `HTTP ${r.status}` }
     } catch (e) {
       return { name, ok: false, detail: signal.aborted ? "60秒の締め切りを超えました" : `接続できません（${(e as Error).name}）` }
     }

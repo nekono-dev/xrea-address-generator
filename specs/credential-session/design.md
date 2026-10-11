@@ -18,7 +18,7 @@
 
 ## 2. 設計項目
 
-### D-1: 型と保持方式 (FR-1, FR-8, FR-11)
+### D-1: 型と保持方式 (FR-1, FR-7, FR-10)
 
 ```ts
 export type XreaCredentials = {
@@ -37,6 +37,8 @@ export interface CredentialStore {
     credentials: Credentials,
     opts?: { previousCookieHeader?: string | null; now?: number },
   ): Promise<string>
+  /** ログアウト。cookie を消す Set-Cookie の値を返す。SQLite方式では cookie が指す行も削除する */
+  remove(cookieHeader: string | null): Promise<string>
 }
 
 export const COOKIE_NAME = "xag_session"
@@ -55,41 +57,65 @@ export const LIMITS = {
 | 項目が LIMITS の長さを超える     | 400 validation_error              |
 | protonToken が空文字または未指定 | null として保持（連携を使わない） |
 
-### D-2: 暗号化と復号 (FR-3, FR-6, FR-9, NFR-1)
+### D-2: 暗号化と復号 (FR-2, FR-3, FR-5, FR-8, FR-9, NFR-1)
 
 ```ts
-/** HKDF-SHA256（salt: "xag-v1"、info: "credentials"）で AES-GCM 256 ビットの鍵を導出する */
-export async function deriveKey(secret: string): Promise<CryptoKey>
+export type Keyring = {
+  current: { kid: string; key: CryptoKey } // 暗号化に使う鍵
+  byKid: Map<string, CryptoKey> // 復号に使える鍵（現行と直前）
+}
 
-/** "v1." + base64url(iv 12バイト + 暗号文 + 認証タグ)。追加認証データは "xag-credentials-v1" */
-export async function seal(key: CryptoKey, payload: unknown): Promise<string>
+/**
+ * HKDF-SHA256（salt: "xag-v1"）で、秘密値ごとに次の2つを導出する。
+ *   info: "credentials" → AES-GCM 256 ビットの鍵
+ *   info: "kid"         → 48ビットを base64url にした8文字の鍵の識別子
+ * secrets[0] が現行、secrets[1] が直前。識別子が同じ鍵は1つにまとめる
+ */
+export async function deriveKey(
+  ...secrets: [current: string, previous?: string]
+): Promise<Keyring>
 
-/** 形式の不一致・認証タグの不一致（改ざん・鍵違い）は例外を出さず null を返す */
-export async function open<T>(key: CryptoKey, sealed: string): Promise<T | null>
+/** "v1." + kid + "." + base64url(iv 12バイト + 暗号文 + 認証タグ) */
+export async function seal(
+  ring: Keyring,
+  payload: unknown,
+  context?: string,
+): Promise<string>
+
+/** 形式の不一致・未知のkid・認証タグの不一致（改ざん・鍵違い・contextの違い）は例外を出さず null を返す */
+export async function open<T>(
+  ring: Keyring,
+  sealed: string,
+  context?: string,
+): Promise<T | null>
 ```
 
-| 項目     | 内容                                                                  |
-| -------- | --------------------------------------------------------------------- |
-| iv       | 暗号化のたびに crypto.getRandomValues で12バイトを生成する            |
-| 平文     | JSON。cookie方式では { c: Credentials, e: 期限のUNIX秒 }              |
-| 鍵の保持 | 起動時に1回だけ導出し、プロセスの変数にのみ保持する（ログに出さない） |
+| 項目           | 内容                                                                                                      |
+| -------------- | --------------------------------------------------------------------------------------------------------- |
+| iv             | 暗号化のたびに crypto.getRandomValues で12バイトを生成する                                                |
+| 追加認証データ | "xag-credentials-v1"。context があるときは "xag-credentials-v1:" + context（SQLite方式ではセッションID）  |
+| 平文           | JSON。cookie方式では { c: Credentials, e: 期限のUNIX秒 }                                                  |
+| 鍵の保持       | 起動時に1回だけ導出し、プロセスの変数にのみ保持する（ログに出さない）                                     |
+| 直前の鍵       | 復号にだけ使う。取り出した認証情報を直前の鍵で再暗号化しない（期限の7日で自然に新しい鍵の暗号文へ替わる） |
 
-### D-3: cookie方式 (FR-3, FR-5, FR-6, FR-12, NFR-2)
+### D-3: cookie方式 (FR-2, FR-4, FR-5, FR-11, NFR-2)
 
 ```ts
 export function createCookieStore(
-  key: CryptoKey,
+  ring: Keyring,
   opts: { secure: boolean },
 ): CredentialStore {
   return {
     async save(credentials, o) {
       const exp = (o?.now ?? nowSec()) + LIFETIME_SEC
-      const value = await seal(key, { c: credentials, e: exp })
+      const value = await seal(ring, { c: credentials, e: exp })
       return cookieHeader(value, opts.secure)
     },
     async load(header, now = nowSec()) {
       const raw = readCookie(header, COOKIE_NAME)
-      const p = raw ? await open<{ c: Credentials; e: number }>(key, raw) : null
+      const p = raw
+        ? await open<{ c: Credentials; e: number }>(ring, raw)
+        : null
       return p && p.e > now ? { credentials: p.c, expiresAt: p.e } : null
     },
   }
@@ -97,11 +123,16 @@ export function createCookieStore(
 
 // Set-Cookie: xag_session=<値>; Max-Age=604800; Path=/; HttpOnly; SameSite=Strict[; Secure]
 function cookieHeader(value: string, secure: boolean): string
+// ログアウト: xag_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict[; Secure]
+function clearCookieHeader(secure: boolean): string
+
+// cookie方式の remove は clearCookieHeader を返すだけで、サーバ側に何も持たない。
+// そのため、ログアウト前に複製された cookie は、期限（7日）まで取り出せる
 ```
 
 入力の上限長を最大にした認証情報（合計772文字）を暗号化したcookieの値は、約1200バイトで、4096バイト以下に収まる。Node.jsとWorkersの両方で動かすため、Node.js固有のAPIを使わない（globalThis.crypto と btoa のみ）。
 
-### D-4: SQLite方式とSQLクライアント (FR-4, FR-8, NFR-3)
+### D-4: SQLite方式とSQLクライアント (FR-3, FR-7, NFR-3)
 
 ```sql
 -- SQLiteの標準の構文のみを使う。標準のsqlite3コマンドで開け、Cloudflare D1（SQLite互換）でも同じ文が通る
@@ -125,34 +156,47 @@ export function createNodeSqliteClient(dbPath: string): SqlClient
 
 // 保持方式。SqlClient にのみ依存する
 export function createSqlStore(
-  key: CryptoKey,
+  ring: Keyring,
   db: SqlClient,
   opts: { secure: boolean },
 ): CredentialStore
-// save: ①DELETE FROM sessions WHERE expires_at < ? ②前のcookieのIDの行を削除 ③INSERT ④Set-Cookie を返す
-// load: SELECT sealed, expires_at FROM sessions WHERE id = ? で引き、期限内なら open で復号して返す。行が無い・期限切れ・復号失敗は null
+// save: 先にセッションIDを生成し、seal(ring, payload, id) で暗号化する。①DELETE FROM sessions WHERE expires_at < ? ②前のcookieのIDの行を削除 ③INSERT ④Set-Cookie を返す
+// load: SELECT sealed, expires_at FROM sessions WHERE id = ? で引き、期限内なら open(ring, sealed, id) で復号して返す。行が無い・期限切れ・復号失敗は null
+// remove: cookie のIDの行を DELETE FROM sessions WHERE id = ? で削除し、clearCookieHeader を返す。IDが無い・行が無いときも成功する
 ```
 
 | 項目               | 内容                                                                             |
 | ------------------ | -------------------------------------------------------------------------------- |
 | データベースの場所 | CREDENTIAL_DB_PATH（既定 /var/lib/xrea-address-generator/sessions.db）           |
-| 暗号化鍵           | cookie方式と同じ秘密値から導出した鍵                                             |
+| 暗号化鍵           | cookie方式と同じ秘密値から導出した鍵（セッションIDを追加認証データに含める）     |
 | 行の内容           | 暗号文のみ。平文の認証情報を列に持たない                                         |
 | 差し替え           | 別の SqlClient（D1のバインディング）を渡せば、保持方式の変更なしに動く           |
 | 疎通               | 標準のsqlite3コマンドや一般的なSQLクライアントで、ファイルを開いて表を参照できる |
 
-### D-5: ルートと保護対象の検査 (FR-1, FR-2, FR-7, FR-9, FR-11)
+### D-5: ルートと保護対象の検査 (FR-1, FR-6, FR-8, FR-10, FR-12)
 
 ```ts
 export type Verify = (x: XreaCredentials) => Promise<boolean> // XREAの一覧を1回取得できれば true
 
+/** 連携の利用可否を最新の状態で確認する。"available" のときだけトークンを保持する */
+export type ProtonCheck = () => Promise<
+  "disabled" | "available" | "unavailable"
+>
+
 export function credentialRoutes(deps: {
   store: CredentialStore
   verify: Verify
+  protonCheck: ProtonCheck
   log: Logger
 }): Hono
 // PUT /api/credentials  本文: { xrea: XreaCredentials; protonToken?: string }
-//   検査 → verify → store.save → 204 と Set-Cookie。verify が false なら 400 invalid_credentials
+//   検査 → verify → （protonToken があれば protonCheck）→ store.save → Set-Cookie
+//   verify が false なら 400 invalid_credentials
+//   protonCheck が "available"、または protonToken なし → 204
+//   protonCheck が "available" 以外 → protonToken を null にして保存し、200 { proton: <protonCheck の結果> }
+//   protonCheck の例外は "unavailable" として扱う
+// DELETE /api/credentials  store.remove → Set-Cookie（cookieを消す）→ 204。未登録でも204。本文も検査も要らない
+//   （SameSite=Strict により他サイトからの送信では cookie が付かず、DELETE は他サイトのフォームから送れない）
 // GET /api/credentials  200 { registered: false } または
 //                       { registered: true, proton: boolean, expiresAt: "<ISO 8601>" }
 
@@ -165,17 +209,19 @@ export function requireCredentials(store: CredentialStore): MiddlewareHandler
 | Content-Type が application/json でない   | 400 validation_error（他サイトからの送信を拒む） |
 | verify の例外（XREAまたは中継の到達不能） | 502 upstream_error                               |
 | verify が false                           | 400 invalid_credentials                          |
+| protonToken あり・連携が利用可能でない    | XREAの認証情報のみ保存して 200 { proton }        |
 
 ログに載せる項目はルート名・状態コード・所要時間のみとする。
 
-### D-6: 設定 (FR-5, FR-10)
+### D-6: 設定 (FR-4, FR-9)
 
-| 環境変数           | 必須 | 既定値                                      | 内容                                              |
-| ------------------ | ---- | ------------------------------------------- | ------------------------------------------------- |
-| COOKIE_SECRET      | 必須 | なし                                        | 32文字以上。鍵の導出に使う                        |
-| CREDENTIAL_STORE   | 任意 | cookie                                      | cookie または sqlite                              |
-| CREDENTIAL_DB_PATH | 任意 | /var/lib/xrea-address-generator/sessions.db | sqlite のときのファイル                           |
-| COOKIE_SECURE      | 任意 | 1                                           | 0 のとき Secure 属性を付けない（LANのHTTP公開用） |
+| 環境変数               | 必須 | 既定値                                      | 内容                                              |
+| ---------------------- | ---- | ------------------------------------------- | ------------------------------------------------- |
+| COOKIE_SECRET          | 必須 | なし                                        | 32文字以上。鍵の導出に使う                        |
+| COOKIE_SECRET_PREVIOUS | 任意 | なし                                        | 直前の秘密値。32文字以上。復号にだけ使う          |
+| CREDENTIAL_STORE       | 任意 | cookie                                      | cookie または sqlite                              |
+| CREDENTIAL_DB_PATH     | 任意 | /var/lib/xrea-address-generator/sessions.db | sqlite のときのファイル                           |
+| COOKIE_SECURE          | 任意 | 1                                           | 0 のとき Secure 属性を付けない（LANのHTTP公開用） |
 
 ```ts
 export function loadCredentialConfig(
@@ -184,11 +230,17 @@ export function loadCredentialConfig(
   const secret = env.COOKIE_SECRET ?? ""
   if (secret.length < 32)
     throw new ConfigError("COOKIE_SECRET は32文字以上で設定してください")
+  const previous = env.COOKIE_SECRET_PREVIOUS || undefined
+  if (previous !== undefined && previous.length < 32)
+    throw new ConfigError(
+      "COOKIE_SECRET_PREVIOUS は32文字以上で設定してください",
+    )
   const store = env.CREDENTIAL_STORE ?? "cookie"
   if (store !== "cookie" && store !== "sqlite")
     throw new ConfigError("CREDENTIAL_STORE は cookie か sqlite です")
   return {
     secret,
+    previousSecret: previous,
     store,
     dbPath: env.CREDENTIAL_DB_PATH || DEFAULT_DB_PATH,
     secure: env.COOKIE_SECURE !== "0",
@@ -200,9 +252,9 @@ SQLクライアントの実装が無い実行環境（Workers）では sqlite �
 
 ## 3. エラー処理
 
-| 事象                                   | 処理                                             |
-| -------------------------------------- | ------------------------------------------------ |
-| COOKIE_SECRET が未設定または32文字未満 | 変数名を示して起動を拒否する                     |
-| 復号の失敗（改ざん・鍵違い）           | 未登録として扱い、理由を応答にもログにも出さない |
-| SQLiteの書き込みの失敗                 | 500 を返し、cookie を発行しない                  |
-| 未登録での保護対象の要求               | 401 credentials_required                         |
+| 事象                                                                         | 処理                                             |
+| ---------------------------------------------------------------------------- | ------------------------------------------------ |
+| COOKIE_SECRET または COOKIE_SECRET_PREVIOUS が未設定（前者）または32文字未満 | 変数名を示して起動を拒否する                     |
+| 復号の失敗（改ざん・鍵違い）                                                 | 未登録として扱い、理由を応答にもログにも出さない |
+| SQLiteの書き込みの失敗                                                       | 500 を返し、cookie を発行しない                  |
+| 未登録での保護対象の要求                                                     | 401 credentials_required                         |

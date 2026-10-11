@@ -2,6 +2,7 @@
 import { fetchWithTimeout } from "./gatewayClient"
 
 export const READER_TIMEOUT_MS = 2_000
+export const READER_HEALTH_TIMEOUT_MS = 1_000
 
 export type ProtonStatus = {
   state: "loading" | "relogin" | "ready" | "error" | "disabled"
@@ -29,6 +30,16 @@ export class ReaderClient {
     )
     if (!res.ok) throw new Error(`reader ${res.status}`)
     return res
+  }
+
+  /** GET /health。共有シークレットなしで1秒で打ち切る。200 のとき true、それ以外と接続失敗は false */
+  async health(): Promise<boolean> {
+    try {
+      const res = await fetchWithTimeout(this.fetchImpl, `${this.baseUrl}/health`, { method: "GET" }, READER_HEALTH_TIMEOUT_MS)
+      return res.status === 200
+    } catch {
+      return false
+    }
   }
 
   /** GET /v1/entries。2秒で打ち切る */
