@@ -68,8 +68,7 @@ CMD ["node", "/app/dist/reader/main.js"]
 
 ```yaml
 x-common: &common
-  restart: unless-stopped
-  env_file: ${ENV_FILE:-.env} # 既定は .env。テストでは別のファイルを指定する
+  restart: unless-stopped # 環境変数は .env（--env-file で変更可）から各サービスの environment へ補間する
 
 services:
   app:
@@ -79,25 +78,27 @@ services:
     environment:
       PORT: "3000"
       BIND_ADDRESS: "0.0.0.0"
-      COOKIE_SECURE: "1" # environment は env_file より優先される。トンネル経由はHTTPSなので常に Secure を付ける
+      COOKIE_SECURE: "1" # トンネル経由はHTTPSなので、環境変数ファイルの値によらず常に Secure を付ける
+      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET を設定してください}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN を設定してください}
+      CREDENTIAL_STORE: ${CREDENTIAL_STORE:-cookie}
       XREA_GATEWAY_URL: http://xrea-gateway:8081
       PROTON_READER_URL: ${PROTON_READER_URL:-} # 空なら Proton Pass 連携を使わない
       CREDENTIAL_DB_PATH: /var/lib/xrea-address-generator/data/sessions.db
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
     volumes: [app-data:/var/lib/xrea-address-generator/data]
     depends_on: { xrea-gateway: { condition: service_healthy } }
   xrea-gateway:
     <<: *common
     image: xrea-address-generator:local
     command: ["node", "/app/dist/gateway/main.js"]
-    environment: { PORT: "8081", BIND_ADDRESS: "0.0.0.0" }
+    environment: { PORT: "8081", BIND_ADDRESS: "0.0.0.0", INTERNAL_TOKEN: "${INTERNAL_TOKEN:?INTERNAL_TOKEN を設定してください}" }
     deploy: { replicas: 1 } # 直列化のため1インスタンスに固定する
   proton-reader:
     <<: *common
     profiles: [proton] # COMPOSE_PROFILES=proton のときだけ起動する
     build: { context: ., target: reader }
     image: xrea-address-generator-reader:local
-    environment: { PORT: "8082", BIND_ADDRESS: "0.0.0.0", SESSION_DIR: /var/lib/xrea-address-generator/session }
+    environment: { PORT: "8082", BIND_ADDRESS: "0.0.0.0", SESSION_DIR: /var/lib/xrea-address-generator/session, INTERNAL_TOKEN: "${INTERNAL_TOKEN:?INTERNAL_TOKEN を設定してください}" }
     volumes: [reader-session:/var/lib/xrea-address-generator/session]
   cloudflared:
     <<: *common
@@ -111,20 +112,21 @@ volumes:
   reader-session:
 ```
 
-| 方針             | 内容                                                                                                      |
-| ---------------- | --------------------------------------------------------------------------------------------------------- |
-| ポート           | compose.yaml のどのサービスにも ports を書かず、ホストへ公開しない                                        |
-| 内部通信         | ゲートウェイと読み取りサービスは、Composeの内部ネットワークのサービス名でのみ接続できる                   |
-| 永続化           | reader-session（Proton Passのセッション）と app-data（SQLite方式のときだけ使う）の2つの名前付きボリューム |
-| cookie の Secure | compose.yaml で COOKIE_SECURE を 1 に固定し、compose.lan.yaml だけが 0 に上書きする                       |
-| トンネルの接続先 | Cloudflareの管理画面で、公開ホスト名の接続先を http://app:3000 にする                                     |
+| 方針             | 内容                                                                                                                       |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| ポート           | compose.yaml のどのサービスにも ports を書かず、ホストへ公開しない                                                         |
+| 秘匿値の範囲     | 各サービスの environment に必要な変数だけを渡す。暗号化の秘密値はアプリにだけ、トンネルのトークンは cloudflared にだけ渡す |
+| 内部通信         | ゲートウェイと読み取りサービスは、Composeの内部ネットワークのサービス名でのみ接続できる                                    |
+| 永続化           | reader-session（Proton Passのセッション）と app-data（SQLite方式のときだけ使う）の2つの名前付きボリューム                  |
+| cookie の Secure | compose.yaml で COOKIE_SECURE を 1 に固定し、compose.lan.yaml だけが 0 に上書きする                                        |
+| トンネルの接続先 | Cloudflareの管理画面で、公開ホスト名の接続先を http://app:3000 にする                                                      |
 
 ```yaml
 # compose.lan.yaml（トンネルを使わないとき、compose.yaml に重ねて指定する）
 # docker compose -f compose.yaml -f compose.lan.yaml up -d
 services:
   app:
-    ports: ["3000:3000"]
+    ports: ["${APP_PORT:-3000}:3000"] # ホスト側のポートは APP_PORT で変えられる
     environment: { COOKIE_SECURE: "0" } # HTTPのLAN接続でも cookie を保持する
 ```
 
@@ -139,6 +141,7 @@ services:
 | PROTON_READER_URL | 任意 | 空     | proton を選ぶときは http://proton-reader:8082                        |
 | TUNNEL_TOKEN      | 任意 | なし   | Cloudflare Tunnelのトークン。空ならトンネルを使わない                |
 | LOG_LEVEL         | 任意 | info   | ログの詳細度                                                         |
+| APP_PORT          | 任意 | 3000   | LAN用の追加定義で公開するホスト側のポート                            |
 
 記入例のファイルには、上の全変数を並べ、必須の値は空にする。実際の値を入れた環境変数ファイルは、リポジトリへ含めない。Compose の定義では、必須の2変数を `${COOKIE_SECRET:?COOKIE_SECRET を設定してください}` の形で参照し、空のときは起動を拒否する。
 

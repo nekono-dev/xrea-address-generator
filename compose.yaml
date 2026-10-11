@@ -1,15 +1,26 @@
+# どのサービスも ports を持たず、ホストへ公開しない。環境変数は .env（--env-file で変更可）から補間する
+x-common: &common
+  restart: unless-stopped
+
 services:
   app:
-    build: .
+    <<: *common
+    build: { context: ., target: app }
     image: xrea-address-generator:local
-    # 環境変数ファイルは ENV_FILE で差し替えられる（既定は .env）
-    env_file: ${ENV_FILE:-.env}
     environment:
-      BIND_ADDRESS: "0.0.0.0"
       PORT: "3000"
-      SESSION_DIR: /var/lib/xrea-address-generator/session
+      BIND_ADDRESS: "0.0.0.0"
+      # トンネル経由はHTTPSなので、環境変数ファイルの値によらず常に Secure を付ける。外せるのは compose.lan.yaml だけ
+      COOKIE_SECURE: "1"
+      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET を設定してください}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN を設定してください}
+      CREDENTIAL_STORE: ${CREDENTIAL_STORE:-cookie}
+      CREDENTIAL_DB_PATH: /var/lib/xrea-address-generator/data/sessions.db
+      XREA_GATEWAY_URL: http://xrea-gateway:8081
+      PROTON_READER_URL: ${PROTON_READER_URL:-} # 空なら Proton Pass 連携を使わない
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
-      - proton-session:/var/lib/xrea-address-generator/session
+      - app-data:/var/lib/xrea-address-generator/data
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -17,18 +28,70 @@ services:
       retries: 3
       start_period: 5s
       start_interval: 1s
-    restart: unless-stopped
+    depends_on:
+      xrea-gateway: { condition: service_healthy }
+
+  # XREAへの要求を直列化するため、1インスタンスに固定する
+  xrea-gateway:
+    <<: *common
+    image: xrea-address-generator:local
+    command: ["node", "/app/dist/gateway/main.js"]
+    deploy: { replicas: 1 }
+    environment:
+      PORT: "8081"
+      BIND_ADDRESS: "0.0.0.0"
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN を設定してください}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+      start_interval: 1s
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp"]
+
+  # COMPOSE_PROFILES=proton のときだけ起動する
+  proton-reader:
+    <<: *common
+    profiles: [proton]
+    build: { context: ., target: reader }
+    image: xrea-address-generator-reader:local
+    environment:
+      PORT: "8082"
+      BIND_ADDRESS: "0.0.0.0"
+      SESSION_DIR: /var/lib/xrea-address-generator/session
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?INTERNAL_TOKEN を設定してください}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - reader-session:/var/lib/xrea-address-generator/session
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8082/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+      start_interval: 1s
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp"]
+
   cloudflared:
+    <<: *common
     image: cloudflare/cloudflared:latest
     command: tunnel --no-autoupdate run
     # TUNNEL_TOKEN が空なら起動しない（0 のあとに、トークンがあるときだけ 1 が付く）
     deploy:
       replicas: 0${TUNNEL_TOKEN:+1}
     environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
     depends_on:
-      app:
-        condition: service_healthy
-    restart: unless-stopped
+      app: { condition: service_healthy }
+
 volumes:
-  proton-session:
+  app-data:
+  reader-session:

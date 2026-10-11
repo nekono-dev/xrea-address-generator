@@ -1,6 +1,9 @@
 # TUNNEL_TOKEN を設定せず、LANだけで使うときの追加定義。compose.yaml に重ねて指定する
 #   docker compose -f compose.yaml -f compose.lan.yaml up -d
+# 公開するホスト側のポートは APP_PORT で変えられる（既定 3000）。HTTPのLAN接続でも cookie を保持できるよう、Secure 属性を外す。信頼できるLANでのみ使うこと
 services:
   app:
     ports:
-      - 3000:3000
+      - ${APP_PORT:-3000}:3000
+    environment:
+      COOKIE_SECURE: "0"
