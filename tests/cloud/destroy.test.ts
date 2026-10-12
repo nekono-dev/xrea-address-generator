@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest"
-import type { Call, Result, Runner } from "../../scripts/cloud/deploy"
+import {
+  scoped,
+  type Call,
+  type Result,
+  type Runner,
+} from "../../scripts/cloud/deploy"
 import {
   destroy,
   loadDestroyConfig,
@@ -57,11 +62,17 @@ describe("クラウドの一括撤去", () => {
     expect(f.execs).toEqual([])
   })
 
-  test("cloud-deploy/AC-18: PROJECT_ID が無いときは Workers だけを撤去し、Google Cloud に触れない", () => {
+  test("cloud-deploy/AC-18: projectId が空（--workers-only）のときは Workers だけを撤去し、Google Cloud に触れない", () => {
     const calls: string[] = []
     const runner: Runner = {
-      query: (c) => (calls.push([c.cmd, ...c.args].join(" ")), { code: 0, stdout: "" }),
-      exec: (c) => (calls.push([c.cmd, ...c.args].join(" ")), { code: 0, stdout: "" }),
+      query: (c) => (
+        calls.push([c.cmd, ...c.args].join(" ")),
+        { code: 0, stdout: "" }
+      ),
+      exec: (c) => (
+        calls.push([c.cmd, ...c.args].join(" ")),
+        { code: 0, stdout: "" }
+      ),
       log: () => {},
     }
     destroy({ ...base, projectId: "" }, runner)
@@ -83,9 +94,44 @@ describe("クラウドの一括撤去", () => {
       dryRun: false,
       wranglerConfig: "wrangler.template.jsonc",
     })
-    // PROJECT_ID が無いときは Google Cloud を撤去しない
-    expect(loadDestroyConfig({ CLOUDFLARE_ACCOUNT_ID: "a" }, [], () => false).projectId).toBe("")
-    expect(() => loadDestroyConfig({ PROJECT_ID: "p" }, [])).toThrow("CLOUDFLARE_ACCOUNT_ID")
+    expect(
+      loadDestroyConfig(
+        { CLOUDFLARE_ACCOUNT_ID: "a" },
+        ["--workers-only"],
+        () => false,
+      ).projectId,
+    ).toBe("")
+    expect(() => loadDestroyConfig({ PROJECT_ID: "p" }, [])).toThrow(
+      "CLOUDFLARE_ACCOUNT_ID",
+    )
     expect(() => loadDestroyConfig(env, ["--force"])).toThrow("--force")
+  })
+
+  test("cloud-deploy/AC-19: PROJECT_ID が無いときは、--workers-only を除いて起動直後に失敗する", () => {
+    expect(() => loadDestroyConfig({ CLOUDFLARE_ACCOUNT_ID: "a" }, [])).toThrow(
+      "PROJECT_ID",
+    )
+    expect(() =>
+      loadDestroyConfig({ CLOUDFLARE_ACCOUNT_ID: "a" }, ["--yes"]),
+    ).toThrow("--workers-only")
+    expect(
+      loadDestroyConfig(
+        { CLOUDFLARE_ACCOUNT_ID: "a", PROJECT_ID: "p" },
+        ["--workers-only"],
+        () => false,
+      ).projectId,
+    ).toBe("")
+  })
+
+  test("cloud-deploy/AC-19: gcloud だけに --project が付き、wrangler などには付かない", () => {
+    expect(
+      scoped({ cmd: "gcloud", args: ["secrets", "list"] }, "proj").args,
+    ).toEqual(["secrets", "list", "--project", "proj"])
+    expect(
+      scoped({ cmd: "npx", args: ["wrangler", "delete"] }, "proj").args,
+    ).toEqual(["wrangler", "delete"])
+    expect(
+      scoped({ cmd: "gcloud", args: ["secrets", "list"] }, "").args,
+    ).toEqual(["secrets", "list"])
   })
 })

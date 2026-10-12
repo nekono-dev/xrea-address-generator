@@ -14,7 +14,7 @@ test.describe("登録と切り替え", () => {
     const api = await mockApi(page, { registered: false })
     await page.goto("/")
     await expect(page.locator("#credentials")).toBeVisible()
-    await expect(page.locator(".cred-app")).toHaveText("ALIAS GENERATOR")
+    await expect(page.locator(".cred-app")).toHaveText("XREA ALIAS DASHBOARD")
     await expect(page.locator("#cred-title")).toHaveText("XREAへログイン")
     await expect(page.locator("#cred-submit")).toHaveText("ログイン")
     await expect(page.locator("#issue")).toHaveCount(0)

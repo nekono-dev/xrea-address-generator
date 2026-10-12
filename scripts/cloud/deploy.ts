@@ -183,15 +183,21 @@ export function deploy(c: DeployConfig, r: Runner): { reader?: string } {
   return { reader }
 }
 
-/** 変更を伴う操作の実行（dry-run のときは表示だけ） */
-export function realRunner(dryRun: boolean): Runner {
+/** gcloud の呼び出しに --project を付ける。gcloud の既定のプロジェクトに頼ると、PROJECT_ID と違うプロジェクトを操作しうるため */
+export function scoped(c: Call, projectId: string): Call {
+  return c.cmd === "gcloud" && projectId ? { ...c, args: [...c.args, "--project", projectId] } : c
+}
+
+/** 変更を伴う操作の実行（dry-run のときは表示だけ）。projectId があるとき、すべての gcloud をそのプロジェクトへ向ける */
+export function realRunner(dryRun: boolean, projectId = ""): Runner {
   const run = (c: Call, capture: boolean): Result => {
     const p = spawnSync(c.cmd, c.args, { input: c.input, encoding: "utf8", stdio: [c.input !== undefined ? "pipe" : "inherit", capture ? "pipe" : "inherit", "inherit"] })
     return { code: p.status ?? 1, stdout: p.stdout ?? "" }
   }
   return {
-    query: c => run(c, true),
-    exec: c => {
+    query: c => run(scoped(c, projectId), true),
+    exec: raw => {
+      const c = scoped(raw, projectId)
       if (dryRun) {
         console.log(`[dry-run] ${c.cmd} ${c.args.join(" ")}${c.input !== undefined ? "  （標準入力で秘匿値を渡す）" : ""}`)
         return { code: 0, stdout: "" }
@@ -211,7 +217,7 @@ async function main(argv: string[]): Promise<number> {
     return 2
   }
   try {
-    const urls = deploy(c, realRunner(c.dryRun))
+    const urls = deploy(c, realRunner(c.dryRun, c.projectId))
     if (urls.reader) console.log(`読み取りサービス: ${urls.reader}`)
     if (c.dryRun) return 0
     if (!c.appUrl) {

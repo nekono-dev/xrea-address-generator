@@ -54,7 +54,7 @@ describe("認証", () => {
     expect(() => loadReaderConfig({})).toThrow(ConfigError)
     expect(() => loadReaderConfig({ INTERNAL_TOKEN: "x" })).toThrow(/INTERNAL_TOKEN/)
     expect(loadReaderConfig({ INTERNAL_TOKEN: TOKEN })).toEqual({
-      internalToken: TOKEN, sessionDir: "/var/lib/xrea-address-generator/session", maxTenants: 20, port: 8082, bindAddress: "0.0.0.0", logLevel: "info",
+      internalToken: TOKEN, sessionDir: "/var/lib/xrea-alias-dashboard/session", maxTenants: 20, port: 8082, bindAddress: "0.0.0.0", logLevel: "info",
     })
   })
 })

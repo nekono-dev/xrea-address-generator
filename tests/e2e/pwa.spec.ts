@@ -23,7 +23,7 @@ test.describe("宣言とアイコン", () => {
     const link = page.locator('link[rel="manifest"]')
     await expect(link).toHaveAttribute("crossorigin", "use-credentials")
     const m = await (await page.request.get((await link.getAttribute("href"))!)).json()
-    expect(m).toMatchObject({ name: "XREA Alias Generator", short_name: "Alias", display: "standalone", theme_color: "#0f172a", start_url: "/" })
+    expect(m).toMatchObject({ name: "XREA Alias Dashboard", short_name: "Alias", display: "standalone", theme_color: "#0f172a", start_url: "/" })
     expect(m.icons.map((i: { sizes: string }) => i.sizes)).toEqual(["192x192", "512x512"])
   })
 
@@ -58,7 +58,7 @@ test.describe("画面ファイルの保存とオフライン", () => {
     await openControlled(page)
     await context.setOffline(true)
     await page.reload()
-    await expect(page.locator("h1")).toHaveText("ALIAS GENERATOR")
+    await expect(page.locator("h1")).toHaveText("XREA ALIAS DASHBOARD")
     await expect(page.locator("#name")).toBeVisible()
     await expect(page.locator("#issue")).toBeVisible()
   })

@@ -51,7 +51,7 @@ export function onCredentialsRequired(fn: () => void): () => void
 ### D-2: 入力フォーム (FR-1, FR-2, FR-3, FR-4)
 
 ```tsx
-<p class="cred-app">ALIAS GENERATOR</p>
+<p class="cred-app">XREA ALIAS DASHBOARD</p>
 <h2>XREAへログイン</h2>
 <label>
   サーバ名
