@@ -68,7 +68,7 @@
 ### D-2: 要求の振り分けと保存 (FR-3, FR-4, FR-5, FR-6, NFR-1, NFR-3)
 
 ```ts
-export const CACHE = "xrea-address-generator-shell"
+export const CACHE = "xrea-alias-dashboard-shell"
 export const SHELL = "/" // 画面の入口は、パスによらずこのキーで保存する
 export const NAV_TIMEOUT_MS = 3000
 export type Route = "network" | "navigate" | "asset" | "static"

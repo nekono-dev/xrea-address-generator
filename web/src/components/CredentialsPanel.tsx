@@ -74,7 +74,7 @@ export function CredentialsPanel({
 
   return (
     <main class="wrap">
-      <h1 class="cred-app">ALIAS GENERATOR</h1>
+      <h1 class="cred-app">XREA ALIAS DASHBOARD</h1>
       <section class="cred cred-head" id="credentials" aria-labelledby="cred-title">
         <h2 id="cred-title">XREAへログイン</h2>
         {notice && (

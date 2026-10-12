@@ -50,8 +50,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
  && apt-get purge -y curl jq && rm -rf /var/lib/apt/lists/*
 COPY --from=build /src/dist /app/dist
 COPY --from=deps /src/node_modules /app/node_modules
-RUN mkdir -p /var/lib/xrea-address-generator/session \
- && chown -R node:node /var/lib/xrea-address-generator
+RUN mkdir -p /var/lib/xrea-alias-dashboard/session \
+ && chown -R node:node /var/lib/xrea-alias-dashboard
 USER node
 CMD ["node", "/app/dist/reader/main.js"]
 ```
@@ -73,7 +73,7 @@ services:
   app:
     <<: *common
     build: { context: ., target: app }
-    image: xrea-address-generator:local
+    image: xrea-alias-dashboard:local
     environment:
       PORT: "3000"
       BIND_ADDRESS: "0.0.0.0"
@@ -82,17 +82,17 @@ services:
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-} # 読み取りサービスを選ぶときだけ必須
       CREDENTIAL_STORE: ${CREDENTIAL_STORE:-cookie}
       PROTON_READER_URL: ${PROTON_READER_URL:-}
-      CREDENTIAL_DB_PATH: /var/lib/xrea-address-generator/data/sessions.db
+      CREDENTIAL_DB_PATH: /var/lib/xrea-alias-dashboard/data/sessions.db
       XREA_SERVERS_FILE: /app/config/xrea-servers.json
-    volumes: [app-data:/var/lib/xrea-address-generator/data, "${XREA_SERVERS_CONFIG:-./config/xrea-servers.json}:/app/config/xrea-servers.json:ro"]
+    volumes: [app-data:/var/lib/xrea-alias-dashboard/data, "${XREA_SERVERS_CONFIG:-./config/xrea-servers.json}:/app/config/xrea-servers.json:ro"]
     deploy: { replicas: 1 } # 直列化のため1インスタンスに固定する
   proton-reader:
     <<: *common
     profiles: [proton] # COMPOSE_PROFILES=proton のときだけ起動する
     build: { context: ., target: reader }
-    image: xrea-address-generator-reader:local
-    environment: { PORT: "8082", BIND_ADDRESS: "0.0.0.0", SESSION_DIR: /var/lib/xrea-address-generator/session, INTERNAL_TOKEN: "${INTERNAL_TOKEN:-}" }
-    volumes: [reader-session:/var/lib/xrea-address-generator/session]
+    image: xrea-alias-dashboard-reader:local
+    environment: { PORT: "8082", BIND_ADDRESS: "0.0.0.0", SESSION_DIR: /var/lib/xrea-alias-dashboard/session, INTERNAL_TOKEN: "${INTERNAL_TOKEN:-}" }
+    volumes: [reader-session:/var/lib/xrea-alias-dashboard/session]
   cloudflared:
     <<: *common
     image: cloudflare/cloudflared:latest

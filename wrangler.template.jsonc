@@ -1,5 +1,5 @@
 {
-  "name": "xrea-address-generator",
+  "name": "xrea-alias-dashboard",
   "main": "dist/worker/index.js",
   "compatibility_date": "2026-08-01",
   // プレビューURL（バージョンURL）と workers.dev を無効にする

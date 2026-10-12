@@ -184,14 +184,14 @@ export class Tenants {
 }
 ```
 
-| 環境変数       | 必須 | 既定値                                  |
-| -------------- | ---- | --------------------------------------- |
-| INTERNAL_TOKEN | 必須 | なし（32文字以上）                      |
-| SESSION_DIR    | 任意 | /var/lib/xrea-address-generator/session |
-| MAX_TENANTS    | 任意 | 20                                      |
-| PORT           | 任意 | 8082                                    |
-| BIND_ADDRESS   | 任意 | 0.0.0.0                                 |
-| LOG_LEVEL      | 任意 | info                                    |
+| 環境変数       | 必須 | 既定値                                |
+| -------------- | ---- | ------------------------------------- |
+| INTERNAL_TOKEN | 必須 | なし（32文字以上）                    |
+| SESSION_DIR    | 任意 | /var/lib/xrea-alias-dashboard/session |
+| MAX_TENANTS    | 任意 | 20                                    |
+| PORT           | 任意 | 8082                                  |
+| BIND_ADDRESS   | 任意 | 0.0.0.0                               |
+| LOG_LEVEL      | 任意 | info                                  |
 
 ## 3. エラー処理
 

@@ -1,7 +1,7 @@
 // 選択した値のブラウザへの保存と復元（発行ドメイン・転送先・絞り込み・並び順）。
 import type { SortOrder } from "./store"
 
-export const PREFS_KEY = "xrea-address-generator:prefs"
+export const PREFS_KEY = "xrea-alias-dashboard:prefs"
 export type Prefs = { domain?: string; forwardTo?: string; serverName?: string; filter?: string | null; order?: SortOrder }
 
 const storageOf = (s?: Storage): Storage | undefined => {

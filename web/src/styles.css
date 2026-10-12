@@ -50,7 +50,7 @@ h1 {
   color: var(--mut);
   margin: 0;
   padding: 34px 0 18px;
-  text-align: center;
+  text-align: left;
 }
 
 /* 上端に固定する全幅の帯。帯自身が背景を持つため、切り取り（overflow・clip-path）は使わない */
@@ -506,12 +506,20 @@ h1 {
 
 /* 認証情報の登録画面とヘッダのボタン。入力欄・ボタンの高さは --h、文字は --fs に従う */
 .head {
-  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.head h1 {
+  min-width: 0;
+  padding: 24px 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 .cred-btn {
-  position: absolute;
-  top: 24px;
-  right: 16px;
+  flex: none;
+  white-space: nowrap;
   height: var(--h);
   font-size: var(--fs-xs);
   background: none;
@@ -526,6 +534,24 @@ h1 {
 .cred-btn:focus-visible {
   color: var(--fg);
   border-color: var(--acc);
+}
+/* PC幅（幅680ピクセル以上）では見出しを中央に置き、ログアウトボタンは右端に残す。スマートフォン幅は左寄せ */
+@media (min-width: 680px) {
+  h1 {
+    text-align: center;
+    text-indent: 0.25em; /* 文字間隔の末尾の余白ぶんを打ち消して、見た目の中心に合わせる */
+  }
+  .head {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+  }
+  .head h1 {
+    grid-column: 2;
+  }
+  .cred-btn {
+    grid-column: 3;
+    justify-self: end;
+  }
 }
 .cred {
   display: grid;

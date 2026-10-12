@@ -34,7 +34,7 @@ async function mountMissing() {
 describe("状態", () => {
   test("web-credentials/AC-1: 未登録の応答を受けると登録画面だけが表示され、一覧と発行フォームの要求が送信されない", async () => {
     const { r, server } = await mountMissing()
-    expect(r.container.querySelector(".cred-app")!.textContent).toBe("ALIAS GENERATOR")
+    expect(r.container.querySelector(".cred-app")!.textContent).toBe("XREA ALIAS DASHBOARD")
     expect(r.container.querySelector("#cred-title")!.textContent).toBe("XREAへログイン")
     expect(r.container.querySelector("#cred-submit")!.textContent).toBe("ログイン")
     expect(r.container.querySelector("#issue")).toBeNull()

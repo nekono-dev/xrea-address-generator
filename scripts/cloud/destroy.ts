@@ -1,13 +1,15 @@
 // クラウド配備の一括撤去（deploy.ts の逆）。本アプリが扱う情報を Cloud Run と Cloudflare に残さない。
 //   npm run destroy:cloud -- --yes        確認を省いて撤去する（省くと PROJECT_ID の入力を求める）
 //   npm run destroy:cloud -- --dry-run    読み取りだけ実行し、変更を伴う操作は表示だけにする
+//   npm run destroy:cloud -- --workers-only  Workers だけを撤去し、Google Cloud に触れない（PROJECT_ID が不要になる）
+// PROJECT_ID（Google Cloud のプロジェクトID）は必須。未設定なら何も変更せず起動直後に止まる。すべての gcloud はそのプロジェクトへ向ける
 // 何度実行しても同じ結果になる。存在しないものは飛ばす。
 import { spawnSync } from "node:child_process"
 import { existsSync } from "node:fs"
 import { createInterface } from "node:readline/promises"
 import { must, realRunner, READER_SERVICE, type Runner } from "./deploy"
 
-/** projectId が空のときは Google Cloud に触れない（読み取りサービスを配備していない構成） */
+/** projectId が空のとき（--workers-only）だけ、Google Cloud に触れない */
 export type DestroyConfig = { projectId: string; region: string; repo: string; wranglerConfig: string; dryRun: boolean; yes: boolean }
 
 /** Secret Manager の共有シークレットと、運用手順で作る COOKIE_SECRET の控え */
@@ -15,9 +17,13 @@ export const SECRETS = ["xrea-internal-token", "xrea-cookie-secret"]
 
 export function loadDestroyConfig(env: NodeJS.ProcessEnv, argv: string[], exists: (p: string) => boolean = existsSync): DestroyConfig {
   if (!env.CLOUDFLARE_ACCOUNT_ID) throw new Error("環境変数 CLOUDFLARE_ACCOUNT_ID（Cloudflare のアカウントID）を設定してください")
-  for (const a of argv) if (!["--yes", "--dry-run"].includes(a)) throw new Error(`不明な引数です: ${a}（使えるのは --yes、--dry-run）`)
+  for (const a of argv) if (!["--yes", "--dry-run", "--workers-only"].includes(a)) throw new Error(`不明な引数です: ${a}（使えるのは --yes、--dry-run、--workers-only）`)
+  const projectId = argv.includes("--workers-only") ? "" : (env.PROJECT_ID ?? "")
+  if (!projectId && !argv.includes("--workers-only")) {
+    throw new Error("環境変数 PROJECT_ID（Google Cloud のプロジェクトID）を設定してください（Workers だけを撤去するときは --workers-only を付けます）")
+  }
   return {
-    projectId: env.PROJECT_ID ?? "",
+    projectId,
     region: env.REGION || "asia-northeast1",
     repo: "xrea",
     wranglerConfig: exists("wrangler.jsonc") ? "wrangler.jsonc" : "wrangler.template.jsonc",
@@ -36,7 +42,7 @@ export function destroy(c: DestroyConfig, r: Runner): void {
   }
 
   if (!c.projectId) {
-    r.log("PROJECT_ID が未設定のため、Google Cloud は撤去しません")
+    r.log("--workers-only のため、Google Cloud は撤去しません")
     return
   }
 
@@ -93,7 +99,7 @@ async function main(argv: string[]): Promise<number> {
     return 2
   }
   try {
-    destroy(c, realRunner(c.dryRun))
+    destroy(c, realRunner(c.dryRun, c.projectId))
     removeLocalImages(c, c.dryRun)
     console.log("\n撤去しました。Cloud Run のログ（Cloud Logging）は保持期間まで残ります。Cloudflare Access のポリシーと DNS は手動で確認してください。")
     return 0

@@ -1,5 +1,5 @@
 // Service Worker の判断部分（要求の振り分け、通信優先の取得、参照ファイルの抽出）。副作用を持たず、単体で検証できる。
-export const CACHE = "xrea-address-generator-shell"
+export const CACHE = "xrea-alias-dashboard-shell"
 export const SHELL = "/" // 画面の入口は、パスによらずこのキーで保存する
 export const NAV_TIMEOUT_MS = 3000
 export const STATIC_FILES = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/apple-touch-icon.png"]

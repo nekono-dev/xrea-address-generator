@@ -24,7 +24,7 @@ const wrangler = ts.parseConfigFileTextToJson(
 
 describe("配備の定義", () => {
   test("cloud-deploy/AC-1: 配備の定義が読み込め、スクリプトと画面ファイルの出力先が含まれる", () => {
-    expect(wrangler.name).toBe("xrea-address-generator")
+    expect(wrangler.name).toBe("xrea-alias-dashboard")
     expect(wrangler.main).toBe("dist/worker/index.js")
     expect(wrangler.preview_urls).toBe(false) // プレビューURLと workers.dev は無効で配備する
     expect(wrangler.workers_dev).toBe(false)

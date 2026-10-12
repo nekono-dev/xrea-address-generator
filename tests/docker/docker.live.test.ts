@@ -68,21 +68,21 @@ describe.runIf(live)("image", () => {
   }, 900_000)
 
   test("docker-deploy/AC-1: 読み取りサービスのイメージで公式CLIのバージョンが表示され、アプリのイメージに含まれず、ハッシュ不一致ではビルドが失敗する", () => {
-    expect(sh(`${DOCKER} run --rm --entrypoint pass-cli xrea-address-generator-reader:local --version`)).toMatch(/^Proton Pass CLI \d+\.\d+\.\d+/)
-    expect(sh(`${DOCKER} run --rm --entrypoint sh xrea-address-generator:local -c 'command -v pass-cli || echo none'`)).toBe("none")
-    const bad = sh(`${DOCKER} build -q --target reader --build-arg PASS_CLI_SHA256=${"0".repeat(64)} -t xrea-address-generator:badhash .`, { allowFail: true })
+    expect(sh(`${DOCKER} run --rm --entrypoint pass-cli xrea-alias-dashboard-reader:local --version`)).toMatch(/^Proton Pass CLI \d+\.\d+\.\d+/)
+    expect(sh(`${DOCKER} run --rm --entrypoint sh xrea-alias-dashboard:local -c 'command -v pass-cli || echo none'`)).toBe("none")
+    const bad = sh(`${DOCKER} build -q --target reader --build-arg PASS_CLI_SHA256=${"0".repeat(64)} -t xrea-alias-dashboard:badhash .`, { allowFail: true })
     expect(bad.startsWith("__FAILED__")).toBe(true)
     expect(bad).toContain("FAILED") // sha256sum の不一致
   }, 600_000)
 
   test("docker-deploy/AC-13: アプリのイメージの展開後のサイズが、300メガバイト以下である", () => {
-    const size = Number(sh(`${DOCKER} image inspect -f '{{.Size}}' xrea-address-generator:local`))
+    const size = Number(sh(`${DOCKER} image inspect -f '{{.Size}}' xrea-alias-dashboard:local`))
     console.log(`アプリのイメージのサイズ: ${Math.round(size / 1024 / 1024)}MB`)
     expect(size).toBeLessThanOrEqual(300 * 1024 * 1024)
   })
 
   test("docker-deploy/AC-14: 読み取りサービスのイメージの展開後のサイズが、500メガバイト以下である", () => {
-    const size = Number(sh(`${DOCKER} image inspect -f '{{.Size}}' xrea-address-generator-reader:local`))
+    const size = Number(sh(`${DOCKER} image inspect -f '{{.Size}}' xrea-alias-dashboard-reader:local`))
     console.log(`読み取りサービスのイメージのサイズ: ${Math.round(size / 1024 / 1024)}MB`)
     expect(size).toBeLessThanOrEqual(500 * 1024 * 1024)
   })
@@ -117,7 +117,7 @@ describe.runIf(live)("compose", () => {
   test("docker-deploy/AC-7: ホストの外部アドレスからアプリのポートへ接続できず、同じネットワークからは接続できる", () => {
     expect(sh("curl -s -m 3 -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/healthz", { allowFail: true })).not.toBe("200")
     const net = `${PROJECT}_default`
-    const out = sh(`${DOCKER} run --rm --network ${net} xrea-address-generator:local node -e 'fetch("http://app:3000/healthz").then(r=>r.text()).then(t=>console.log(t))'`)
+    const out = sh(`${DOCKER} run --rm --network ${net} xrea-alias-dashboard:local node -e 'fetch("http://app:3000/healthz").then(r=>r.text()).then(t=>console.log(t))'`)
     expect(JSON.parse(out)).toEqual({ ok: true })
   }, 120_000)
 
@@ -133,7 +133,7 @@ describe.runIf(live)("compose", () => {
     expect(sh(`${DOCKER} exec ${g} id -u`)).not.toBe("0")
     expect(sh(`${DOCKER} exec ${g} sh -c 'touch /should-fail 2>&1 || echo denied'`)).toContain("denied")
     expect(sh(`${DOCKER} exec ${g} sh -c 'touch /tmp/ok && echo ok'`)).toBe("ok")
-    expect(sh(`${DOCKER} exec ${g} sh -c 'touch /var/lib/xrea-address-generator/data/ok && echo ok'`)).toBe("ok")
+    expect(sh(`${DOCKER} exec ${g} sh -c 'touch /var/lib/xrea-alias-dashboard/data/ok && echo ok'`)).toBe("ok")
     const cfg = JSON.parse(sh(`${DOCKER} inspect -f '{{json .HostConfig}}' ${g}`))
     expect(cfg.ReadonlyRootfs).toBe(true)
     expect(cfg.CapDrop).toEqual(["ALL"])
