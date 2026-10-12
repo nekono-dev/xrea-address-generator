@@ -3,7 +3,7 @@ import { MIN_TOKEN_LENGTH } from "../shared/internalAuth"
 
 export class ConfigError extends Error {}
 
-export const DEFAULT_SESSION_DIR = "/var/lib/xrea-address-generator/session"
+export const DEFAULT_SESSION_DIR = "/var/lib/xrea-alias-dashboard/session"
 
 export type ReaderConfig = { internalToken: string; sessionDir: string; maxTenants: number; port: number; bindAddress: string; logLevel: string }
 

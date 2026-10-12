@@ -337,12 +337,13 @@ Workers の前段の Cloudflare Access の設定は、このリポジトリの�
 本アプリが扱う情報を Cloud Run と Cloudflare に残さないよう、構成例のすべてを削除します。**元に戻せません。Workers を削除すると、登録済みの認証情報（暗号化 cookie の鍵 `COOKIE_SECRET`）も失われ、利用者は再登録が必要になります。**
 
 ```sh
-npm run destroy:cloud             # PROJECT_ID（未設定なら delete）の入力で確認してから削除する
+npm run destroy:cloud             # PROJECT_ID の入力で確認してから削除する
 npm run destroy:cloud -- --yes    # 確認を省く（非対話の実行ではこちらが必須）
 npm run destroy:cloud -- --dry-run
+npm run destroy:cloud -- --workers-only    # Workers だけを削除する（PROJECT_ID が不要）
 ```
 
-必要な環境変数は `CLOUDFLARE_ACCOUNT_ID` です。読み取りサービスを配備していたときは `PROJECT_ID`（任意で `REGION`）も設定します（未設定なら Google Cloud には触れません）。何度実行しても同じ結果になり、存在しないものは飛ばします。次の順に削除します。
+必要な環境変数は `CLOUDFLARE_ACCOUNT_ID` と `PROJECT_ID`（任意で `REGION`）です。`PROJECT_ID` が未設定なら、何も削除せず起動直後に止まります。Google Cloud に触れず Workers だけを削除するときは `--workers-only` を付けます。すべての `gcloud` は `PROJECT_ID` のプロジェクトへ向けて実行し、`gcloud config` の既定のプロジェクトには依存しません。何度実行しても同じ結果になり、存在しないものは飛ばします。次の順に削除します。
 
 | 順 | 対象                                  | 内容                                                                                     |
 | -- | ------------------------------------- | ---------------------------------------------------------------------------------------- |

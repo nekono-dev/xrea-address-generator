@@ -167,7 +167,7 @@ export function createSqlStore(
 
 | 項目               | 内容                                                                             |
 | ------------------ | -------------------------------------------------------------------------------- |
-| データベースの場所 | CREDENTIAL_DB_PATH（既定 /var/lib/xrea-address-generator/sessions.db）           |
+| データベースの場所 | CREDENTIAL_DB_PATH（既定 /var/lib/xrea-alias-dashboard/sessions.db）             |
 | 暗号化鍵           | cookie方式と同じ秘密値から導出した鍵（セッションIDを追加認証データに含める）     |
 | 行の内容           | 暗号文のみ。平文の認証情報を列に持たない                                         |
 | 差し替え           | 別の SqlClient（D1のバインディング）を渡せば、保持方式の変更なしに動く           |
@@ -215,13 +215,13 @@ export function requireCredentials(store: CredentialStore): MiddlewareHandler
 
 ### D-6: 設定 (FR-4, FR-9)
 
-| 環境変数               | 必須 | 既定値                                      | 内容                                              |
-| ---------------------- | ---- | ------------------------------------------- | ------------------------------------------------- |
-| COOKIE_SECRET          | 必須 | なし                                        | 32文字以上。鍵の導出に使う                        |
-| COOKIE_SECRET_PREVIOUS | 任意 | なし                                        | 直前の秘密値。32文字以上。復号にだけ使う          |
-| CREDENTIAL_STORE       | 任意 | cookie                                      | cookie または sqlite                              |
-| CREDENTIAL_DB_PATH     | 任意 | /var/lib/xrea-address-generator/sessions.db | sqlite のときのファイル                           |
-| COOKIE_SECURE          | 任意 | 1                                           | 0 のとき Secure 属性を付けない（LANのHTTP公開用） |
+| 環境変数               | 必須 | 既定値                                    | 内容                                              |
+| ---------------------- | ---- | ----------------------------------------- | ------------------------------------------------- |
+| COOKIE_SECRET          | 必須 | なし                                      | 32文字以上。鍵の導出に使う                        |
+| COOKIE_SECRET_PREVIOUS | 任意 | なし                                      | 直前の秘密値。32文字以上。復号にだけ使う          |
+| CREDENTIAL_STORE       | 任意 | cookie                                    | cookie または sqlite                              |
+| CREDENTIAL_DB_PATH     | 任意 | /var/lib/xrea-alias-dashboard/sessions.db | sqlite のときのファイル                           |
+| COOKIE_SECURE          | 任意 | 1                                         | 0 のとき Secure 属性を付けない（LANのHTTP公開用） |
 
 ```ts
 export function loadCredentialConfig(

@@ -243,7 +243,7 @@ async function pollProton() {
 ### D-9: 選択した値の保存と復元 (FR-4, FR-5, FR-6)
 
 ```ts
-const KEY = "xrea-address-generator:prefs"
+const KEY = "xrea-alias-dashboard:prefs"
 type Filter = string | null
 export type Prefs = {
   domain?: string

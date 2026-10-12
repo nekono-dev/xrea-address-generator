@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { alias, mockApi } from "./mock"
 
-const PREFS_KEY = "xrea-address-generator:prefs"
+const PREFS_KEY = "xrea-alias-dashboard:prefs"
 async function open(page: Page) {
   await page.goto("/")
   await expect(page.locator(".row").first()).toBeVisible()

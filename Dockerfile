@@ -19,8 +19,8 @@ COPY --from=build /src/dist /app/dist
 COPY --from=deps /src/node_modules /app/node_modules
 COPY package.json /app/package.json
 # SQLite方式を選んだときの保存先
-RUN mkdir -p /var/lib/xrea-address-generator/data \
- && chown -R node:node /var/lib/xrea-address-generator
+RUN mkdir -p /var/lib/xrea-alias-dashboard/data \
+ && chown -R node:node /var/lib/xrea-alias-dashboard
 USER node
 CMD ["node", "/app/dist/app/node.js"]
 
@@ -41,7 +41,7 @@ WORKDIR /app
 COPY --from=build /src/dist /app/dist
 COPY --from=deps /src/node_modules /app/node_modules
 COPY package.json /app/package.json
-RUN mkdir -p /var/lib/xrea-address-generator/session \
- && chown -R node:node /var/lib/xrea-address-generator
+RUN mkdir -p /var/lib/xrea-alias-dashboard/session \
+ && chown -R node:node /var/lib/xrea-alias-dashboard
 USER node
 CMD ["node", "/app/dist/reader/main.js"]

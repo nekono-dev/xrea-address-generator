@@ -23,7 +23,7 @@
 ### D-1: Workersの配備の定義 (FR-1, FR-2, FR-7, NFR-1)
 
 ```toml
-name = "xrea-address-generator"
+name = "xrea-alias-dashboard"
 main = "dist/worker/index.js"
 compatibility_date = "2026-08-01"
 
@@ -194,15 +194,15 @@ npx wrangler secret delete COOKIE_SECRET_PREVIOUS
 
 `npm run deploy:cloud` は `scripts/cloud/deploy.ts` を実行する。外部コマンドの実行は差し替え可能な実行環境（読み取りの `query` と、変更を伴う `exec`）を通し、テストでは呼び出しの記録で検証する。
 
-| 入力                    | 内容                                                                  |
-| ----------------------- | --------------------------------------------------------------------- |
-| `PROJECT_ID`            | 読み取りサービスを配備するときだけ必須。Google Cloud のプロジェクトID |
-| `CLOUDFLARE_ACCOUNT_ID` | 必須。Cloudflare のアカウントID                                       |
-| `REGION`                | 任意。既定は `asia-northeast1`                                        |
-| `IMAGE_TAG`             | 任意。既定は `v1`。更新のたびに変えない                               |
-| `APP_URL`               | 任意。あれば最後に疎通確認を実行する                                  |
-| `--no-reader`           | 読み取りサービスを配備せず、`PROTON_READER_URL` を空にする            |
-| `--dry-run`             | 読み取りだけ実行し、変更を伴う操作は表示だけにする                    |
+| 入力                    | 内容                                                                                                                                                     |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PROJECT_ID`            | 読み取りサービスを配備するときだけ必須。Google Cloud のプロジェクトID。すべての `gcloud` に `--project` として付与し、`gcloud config` の既定に依存しない |
+| `CLOUDFLARE_ACCOUNT_ID` | 必須。Cloudflare のアカウントID                                                                                                                          |
+| `REGION`                | 任意。既定は `asia-northeast1`                                                                                                                           |
+| `IMAGE_TAG`             | 任意。既定は `v1`。更新のたびに変えない                                                                                                                  |
+| `APP_URL`               | 任意。あれば最後に疎通確認を実行する                                                                                                                     |
+| `--no-reader`           | 読み取りサービスを配備せず、`PROTON_READER_URL` を空にする                                                                                               |
+| `--dry-run`             | 読み取りだけ実行し、変更を伴う操作は表示だけにする                                                                                                       |
 
 配備の順序と冪等性:
 
@@ -217,7 +217,7 @@ npx wrangler secret delete COOKIE_SECRET_PREVIOUS
 - URL は `wrangler deploy --var` で渡し、個人用の `wrangler.jsonc` を書き換えない。定義は `wrangler.jsonc` があればそれを、無ければ雛形を使う。
 - Cloudflare Access の設定は含めない。
 
-一括撤去（`npm run destroy:cloud`、`scripts/cloud/destroy.ts`）は同じ実行環境を使い、存在を確認してから削除する。確認なしでは実行せず、`--yes` か PROJECT_ID の入力を求める。
+一括撤去（`npm run destroy:cloud`、`scripts/cloud/destroy.ts`）は同じ実行環境を使い、存在を確認してから削除する。確認なしでは実行せず、`--yes` か PROJECT_ID の入力を求める。`PROJECT_ID` は必須で、未設定なら何も変更せず起動直後に終了コード2で止まる。Google Cloud に触れず Workers だけを撤去するときは `--workers-only` を明示する。
 
 | 順  | 対象              | 処理                                                             |
 | --- | ----------------- | ---------------------------------------------------------------- |

@@ -50,7 +50,7 @@ h1 {
   color: var(--mut);
   margin: 0;
   padding: 34px 0 18px;
-  text-align: center;
+  text-align: left;
 }
 
 /* 上端に固定する全幅の帯。帯自身が背景を持つため、切り取り（overflow・clip-path）は使わない */
@@ -506,12 +506,20 @@ h1 {
 
 /* 認証情報の登録画面とヘッダのボタン。入力欄・ボタンの高さは --h、文字は --fs に従う */
 .head {
-  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.head h1 {
+  min-width: 0;
+  padding: 24px 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 .cred-btn {
-  position: absolute;
-  top: 24px;
-  right: 16px;
+  flex: none;
+  white-space: nowrap;
   height: var(--h);
   font-size: var(--fs-xs);
   background: none;

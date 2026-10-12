@@ -94,7 +94,7 @@ function Main({ store, pollMs, header }: { store: Store; pollMs: number; header:
   return (
     <>
       <div class="wrap head">
-        <h1>ALIAS GENERATOR</h1>
+        <h1>XREA ALIAS DASHBOARD</h1>
         {header}
       </div>
       <div class="sticky" id="sticky">

@@ -49,8 +49,8 @@ XREA のメール転送アドレス（エイリアス）を、ワンボタンで
 2. **Proton Pass の読み取り専用アクセストークン**（有料プラン。省略すると Proton Pass 連携を使いません。登録時に画面で入力します）:
    ```sh
    pass-cli login                                  # ブラウザでログイン
-   pass-cli pat create --name xrea-address-generator --expiration 1y
-   pass-cli pat access grant --personal-access-token-name xrea-address-generator \
+   pass-cli pat create --name xrea-alias-dashboard --expiration 1y
+   pass-cli pat access grant --personal-access-token-name xrea-alias-dashboard \
      --vault-name "<照合に使うVault名>" --role viewer
    ```
    アプリは Vault の名前を指定せず、このトークンで参照できるすべての Vault を調べます。照合の対象は、ここで権限を与えた Vault で決まります。
@@ -97,14 +97,14 @@ docker compose -f compose.yaml -f compose.lan.yaml up -d
 | `INTERNAL_TOKEN` | 条件付き | | 32 文字以上。`PROTON_READER_URL` を設定するときだけ必須。読み取りサービスとの共有シークレット |
 | `PROTON_READER_URL` | 任意 | | `proton-reader` の URL。空なら Proton Pass 連携を使わない。Workers は https のみ。Node.js/Docker は https のほか、`proton-reader`・`localhost`・プライベートIP（10/8、172.16/12、192.168/16）への http だけを許す |
 | `CREDENTIAL_STORE` | 任意 | `cookie` | `cookie` または `sqlite`（Workers は `cookie` のみ） |
-| `CREDENTIAL_DB_PATH` | 任意 | `/var/lib/xrea-address-generator/sessions.db` | `sqlite` のときの保存先 |
+| `CREDENTIAL_DB_PATH` | 任意 | `/var/lib/xrea-alias-dashboard/sessions.db` | `sqlite` のときの保存先 |
 | `COOKIE_SECURE` | 任意 | `1` | `0` で cookie の `Secure` 属性を外す（LAN の HTTP 公開用） |
 | `TUNNEL_TOKEN` | 任意 | | 設定があると `BIND_ADDRESS` の既定が `127.0.0.1` になる |
 | `BIND_ADDRESS` | 任意 | `0.0.0.0`（`TUNNEL_TOKEN` があれば `127.0.0.1`） | 待ち受けるアドレス |
 | `PORT` | 任意 | `3000` | 待ち受けるポート |
 | `LOG_LEVEL` | 任意 | `info` | ログの詳細度 |
 
-`proton-reader`: `INTERNAL_TOKEN`（必須）、`SESSION_DIR`（既定 `/var/lib/xrea-address-generator/session`）、`MAX_TENANTS`（既定 20）、`PORT`（既定 8082）、`BIND_ADDRESS`、`LOG_LEVEL`。
+`proton-reader`: `INTERNAL_TOKEN`（必須）、`SESSION_DIR`（既定 `/var/lib/xrea-alias-dashboard/session`）、`MAX_TENANTS`（既定 20）、`PORT`（既定 8082）、`BIND_ADDRESS`、`LOG_LEVEL`。
 
 Docker Compose 用の変数（`.env`）は [.env.example](.env.example) を参照してください。
 

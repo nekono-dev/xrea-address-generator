@@ -1,7 +1,7 @@
 // 秘密値・保持方式・Secure属性の読み込みと検証。
 export class ConfigError extends Error {}
 
-export const DEFAULT_DB_PATH = "/var/lib/xrea-address-generator/sessions.db"
+export const DEFAULT_DB_PATH = "/var/lib/xrea-alias-dashboard/sessions.db"
 
 export type CredentialConfig = {
   secret: string
