@@ -535,6 +535,24 @@ h1 {
   color: var(--fg);
   border-color: var(--acc);
 }
+/* PC幅（幅680ピクセル以上）では見出しを中央に置き、ログアウトボタンは右端に残す。スマートフォン幅は左寄せ */
+@media (min-width: 680px) {
+  h1 {
+    text-align: center;
+    text-indent: 0.25em; /* 文字間隔の末尾の余白ぶんを打ち消して、見た目の中心に合わせる */
+  }
+  .head {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+  }
+  .head h1 {
+    grid-column: 2;
+  }
+  .cred-btn {
+    grid-column: 3;
+    justify-self: end;
+  }
+}
 .cred {
   display: grid;
   gap: 14px;
