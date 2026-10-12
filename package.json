@@ -1,6 +1,6 @@
 {
   "name": "xrea-alias-dashboard",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "XREAのメール転送アドレスをワンボタンで発行・管理するWebアプリ",
